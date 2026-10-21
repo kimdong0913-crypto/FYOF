@@ -19,3 +19,7 @@ ai/fashn-vton-1.5/weights/
 
 # 로그
 *.log
+
+# GCP용 설정 백업 (비밀번호 포함)
+db.properties.*
+!db.properties.example

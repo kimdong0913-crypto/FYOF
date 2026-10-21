@@ -137,8 +137,8 @@ public class StyleVoteController {
     public StylePost create(@RequestBody NewPost req, @RequestHeader(value = "Authorization", required = false) String authorization) {
         AuthService.User user = auth.require(authorization);
         ensureSchema();
-        String lookId = LOOKS.contains(req.lookId()) ? req.lookId() : "wide";
-        if (!CATEGORIES.contains(req.category())) throw bad("분류가 올바르지 않습니다.");
+        String lookId = in(LOOKS, req.lookId()) ? req.lookId() : "wide";
+        if (!in(CATEGORIES, req.category())) throw bad("분류가 올바르지 않습니다.");
         String title = trim(req.title(), 40);
         if (title.isEmpty()) throw bad("조합 이름을 입력해 주세요.");
         List<String> colors = colors(req.colors());
@@ -148,8 +148,8 @@ public class StyleVoteController {
         String author = user.key();
         Slots slots = slots(req.category(), req.bottomColor(), req.topColor(), req.shoeColor());
         if (slots != null) colors = slotHexes(slots);
-        String gender = StylePalette.GENDERS.contains(req.gender()) ? req.gender() : "";
-        String age = StylePalette.AGES.contains(req.ageGroup()) ? req.ageGroup() : "";
+        String gender = in(StylePalette.GENDERS, req.gender()) ? req.gender() : "";
+        String age = in(StylePalette.AGES, req.ageGroup()) ? req.ageGroup() : "";
 
         long id = insert(lookId, req.category(), title, colors, comment, nickname, author, slots, gender, age);
         return findForAuthor(id, author);
@@ -476,6 +476,11 @@ public class StyleVoteController {
                 rs.getInt("mine") == 1,
                 rs.getInt("reported") == 1,
                 rs.getInt("author_badge") == 1);
+    }
+
+    /** Set.of(...).contains(null) 은 예외를 던지므로, 빠진 값(null)은 "목록에 없음"으로 본다. */
+    private static boolean in(Set<String> allowed, String value) {
+        return value != null && allowed.contains(value);
     }
 
     private static String trim(String s, int max) {
