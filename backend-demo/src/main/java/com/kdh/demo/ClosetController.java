@@ -32,6 +32,7 @@ import org.springframework.web.server.ResponseStatusException;
  *   POST   /api/closet/fits               (multipart: image, productId, ai) -> 피팅 결과 저장
  *   GET    /api/closet/fits/{id}/image    -> image/png
  *   DELETE /api/closet/fits/{id}
+ *   GET    /api/closet/outfits            -> 내 옷장 아이템만으로 입을 수 있는 인기 코디
  * 상품 목록은 프론트(catalog.ts)에 있으므로 서버는 상품 id 형식만 확인한다.
  */
 @RestController
@@ -133,6 +134,27 @@ public class ClosetController {
         long user = auth.require(authorization).id();
         ensureSchema();
         jdbc.update("DELETE FROM closet_fits WHERE id = ? AND user_id = ?", id, user);
+    }
+
+    @GetMapping("/outfits")
+    public List<StyleVoteController.WeightedOutfit> outfits(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        long user = auth.require(authorization).id();
+        ensureSchema();
+        // 상의·하의·신발이 모두 내 옷장에 있고, 아우터·액세서리는 없거나 내 옷장에 있는 코디
+        String mine = "(SELECT product_id FROM closet_items WHERE user_id = ?)";
+        try {
+            return jdbc.query("""
+                    SELECT p.*, 1 + COUNT(v.post_id) AS weight FROM style_posts p LEFT JOIN style_votes v ON v.post_id = p.id
+                    WHERE p.hidden = 0 AND p.category = 'OUTFIT'
+                      AND p.top_item IN %1$s AND p.bottom_item IN %1$s AND p.shoe_item IN %1$s
+                      AND (p.outer_item = '' OR p.outer_item IN %1$s) AND (p.acc_item = '' OR p.acc_item IN %1$s)
+                    GROUP BY p.id ORDER BY weight DESC, p.id DESC LIMIT 12""".formatted(mine),
+                    (rs, i) -> new StyleVoteController.WeightedOutfit(rs.getLong("id"), rs.getString("title"),
+                            StyleVoteController.outfitOf(rs), rs.getInt("weight")),
+                    user, user, user, user, user);
+        } catch (org.springframework.jdbc.BadSqlGrammarException e) {
+            return List.of(); // 코디 테이블이 아직 없으면(커뮤니티를 한 번도 안 열었으면) 빈 목록
+        }
     }
 
     @ExceptionHandler(ResponseStatusException.class)

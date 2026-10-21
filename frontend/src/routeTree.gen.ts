@@ -14,7 +14,7 @@ import { Route as ClosetRouteImport } from './routes/closet'
 import { Route as FittingRouteImport } from './routes/fitting'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ResultsRouteImport } from './routes/results'
-import { Route as ProductIdRouteImport } from './routes/product/$id'
+import { Route as ItemIdRouteImport } from './routes/item/$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -41,9 +41,9 @@ const ResultsRoute = ResultsRouteImport.update({
   path: '/results',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProductIdRoute = ProductIdRouteImport.update({
-  id: '/product/$id',
-  path: '/product/$id',
+const ItemIdRoute = ItemIdRouteImport.update({
+  id: '/item/$id',
+  path: '/item/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -53,7 +53,7 @@ export interface FileRoutesByFullPath {
   '/fitting': typeof FittingRoute
   '/login': typeof LoginRoute
   '/results': typeof ResultsRoute
-  '/product/$id': typeof ProductIdRoute
+  '/item/$id': typeof ItemIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -61,7 +61,7 @@ export interface FileRoutesByTo {
   '/fitting': typeof FittingRoute
   '/login': typeof LoginRoute
   '/results': typeof ResultsRoute
-  '/product/$id': typeof ProductIdRoute
+  '/item/$id': typeof ItemIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -70,14 +70,13 @@ export interface FileRoutesById {
   '/fitting': typeof FittingRoute
   '/login': typeof LoginRoute
   '/results': typeof ResultsRoute
-  '/product/$id': typeof ProductIdRoute
+  '/item/$id': typeof ItemIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    '/' | '/closet' | '/fitting' | '/login' | '/results' | '/product/$id'
+  fullPaths: '/' | '/closet' | '/fitting' | '/login' | '/results' | '/item/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/closet' | '/fitting' | '/login' | '/results' | '/product/$id'
+  to: '/' | '/closet' | '/fitting' | '/login' | '/results' | '/item/$id'
   id:
     | '__root__'
     | '/'
@@ -85,7 +84,7 @@ export interface FileRouteTypes {
     | '/fitting'
     | '/login'
     | '/results'
-    | '/product/$id'
+    | '/item/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -94,7 +93,7 @@ export interface RootRouteChildren {
   FittingRoute: typeof FittingRoute
   LoginRoute: typeof LoginRoute
   ResultsRoute: typeof ResultsRoute
-  ProductIdRoute: typeof ProductIdRoute
+  ItemIdRoute: typeof ItemIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -134,11 +133,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResultsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/product/$id': {
-      id: '/product/$id'
-      path: '/product/$id'
-      fullPath: '/product/$id'
-      preLoaderRoute: typeof ProductIdRouteImport
+    '/item/$id': {
+      id: '/item/$id'
+      path: '/item/$id'
+      fullPath: '/item/$id'
+      preLoaderRoute: typeof ItemIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -150,7 +149,7 @@ const rootRouteChildren: RootRouteChildren = {
   FittingRoute: FittingRoute,
   LoginRoute: LoginRoute,
   ResultsRoute: ResultsRoute,
-  ProductIdRoute: ProductIdRoute,
+  ItemIdRoute: ItemIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,15 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Download, Heart, Sparkles, Trash2 } from "lucide-react";
+import { ArrowUpRight, Download, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { OutfitPieces } from "@/components/outfit-card";
 import { SiteHeader, SiteFooter } from "@/components/site-header";
 import { api, apiImage, errorText } from "@/lib/api";
-import { categories, categoryOf, products } from "@/lib/catalog";
+import { categories, categoryOf, itemById, items } from "@/lib/catalog";
 import { toggleSaved, useSavedItems } from "@/lib/closet";
+import type { WeightedOutfit } from "@/lib/outfit";
 import { useUser } from "@/lib/session";
 
 export const Route = createFileRoute("/closet")({
-  head: () => ({ meta: [{ title: "나만의 옷장 — FORME" }, { name: "description", content: "찜한 상품과 저장한 피팅 결과를 한곳에서 보세요." }] }),
+  head: () => ({ meta: [{ title: "내 옷장 — FYOF" }, { name: "description", content: "가지고 있는 옷을 등록하면 그 옷으로 입을 수 있는 인기 코디를 찾아 드려요." }] }),
   component: Closet,
 });
 
@@ -17,16 +19,16 @@ type Fit = { id: number; productId: string; ai: boolean; savedAt: string };
 
 function FitCard({ fit, onDelete }: { fit: Fit; onDelete: () => void }) {
   const [src, setSrc] = useState<string | null>(null);
-  const product = products.find(p => p.id === fit.productId);
+  const item = itemById(fit.productId);
   useEffect(() => {
     let url: string | null = null;
     apiImage(`/api/closet/fits/${fit.id}/image`).then(u => { url = u; setSrc(u); }).catch(() => setSrc(null));
     return () => { if (url) URL.revokeObjectURL(url); };
   }, [fit.id]);
   return <div className="closet-fit">
-    <div className="closet-fit-image">{src ? <img src={src} alt={`${product?.name ?? "상품"} 피팅 결과`}/> : <span>불러오는 중…</span>}<span className="closet-fit-tag">{fit.ai ? <><Sparkles size={11}/> AI</> : "OVERLAY"}</span></div>
-    <div className="closet-fit-meta"><span>{new Date(fit.savedAt).toLocaleDateString("ko-KR")}</span><strong>{product?.name ?? fit.productId}</strong></div>
-    <div className="vote-owner-actions">{src && <a className="closet-download" href={src} download={`forme-closet-${fit.id}.png`}><Download size={13}/> 저장</a>}<Button size="sm" variant="ghost" onClick={onDelete}><Trash2 size={13}/> 삭제</Button></div>
+    <div className="closet-fit-image">{src ? <img src={src} alt={`${item?.name ?? "아이템"} 피팅 결과`}/> : <span>불러오는 중…</span>}<span className="closet-fit-tag">{fit.ai ? <><Sparkles size={11}/> AI</> : "OVERLAY"}</span></div>
+    <div className="closet-fit-meta"><span>{new Date(fit.savedAt).toLocaleDateString("ko-KR")}</span><strong>{item?.name ?? fit.productId}</strong></div>
+    <div className="vote-owner-actions">{src && <a className="closet-download" href={src} download={`fyof-closet-${fit.id}.png`}><Download size={13}/> 저장</a>}<Button size="sm" variant="ghost" onClick={onDelete}><Trash2 size={13}/> 삭제</Button></div>
   </div>;
 }
 
@@ -34,39 +36,52 @@ function Closet() {
   const user = useUser();
   const saved = useSavedItems();
   const [fits, setFits] = useState<Fit[]>([]);
+  const [outfits, setOutfits] = useState<WeightedOutfit[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
-  const [cat, setCat] = useState<"all" | string>("all");
+  const [adding, setAdding] = useState(false);
+  const [addCat, setAddCat] = useState<string>("outer");
 
   useEffect(() => {
     if (!user) return;
     api<{ fits: Fit[] }>("/api/closet").then(c => { setFits(c.fits); setStatus("ready"); }).catch(() => setStatus("error"));
   }, [user]);
+  // 옷장이 바뀔 때마다 내 옷으로 입을 수 있는 코디를 다시 찾는다
+  const savedKey = [...saved].sort().join(",");
+  useEffect(() => {
+    if (!user) return;
+    api<WeightedOutfit[]>("/api/closet/outfits").then(setOutfits).catch(() => setOutfits([]));
+  }, [user, savedKey]);
 
-  if (!user) return <><SiteHeader/><main className="closet-page wrap"><div className="page-breadcrumb">ACCOUNT <span>/</span> MY CLOSET</div><section className="empty-results"><span className="eyebrow">MY CLOSET / 000</span><h2>로그인하면 나만의 옷장을 쓸 수 있어요.</h2><p>상품을 찜하거나 피팅 결과를 저장해 두고 언제든 다시 볼 수 있어요.</p><Button asChild><Link to="/login" search={{ redirect: "/closet" }}>로그인하기 <ArrowUpRight size={16}/></Link></Button></section></main><SiteFooter/></>;
+  if (!user) return <><SiteHeader/><main className="closet-page wrap"><div className="page-breadcrumb">ACCOUNT <span>/</span> MY CLOSET</div><section className="empty-results"><span className="eyebrow">MY CLOSET / 000</span><h2>로그인하면 내 옷장을 쓸 수 있어요.</h2><p>가지고 있는 옷을 등록하면, 그 옷들로 입을 수 있는 인기 코디를 찾아 드려요.</p><Button asChild><Link to="/login" search={{ redirect: "/closet" }}>로그인하기 <ArrowUpRight size={16}/></Link></Button></section></main><SiteFooter/></>;
 
-  const items = products.filter(p => saved.has(p.id));
-  const presentCats = categories.filter(c => items.some(p => p.category === c.id));
-  const shown = cat === "all" ? items : items.filter(p => p.category === cat);
+  const mine = items.filter(i => saved.has(i.id));
+  const toggle = async (id: string) => { setError(""); try { await toggleSaved(id); } catch (e) { setError(errorText(e, "옷장을 바꾸지 못했습니다.")); } };
   const removeFit = async (id: number) => {
     try { await api<void>(`/api/closet/fits/${id}`, { method: "DELETE" }); setFits(list => list.filter(f => f.id !== id)); }
     catch (e) { setError(errorText(e, "삭제하지 못했습니다.")); }
   };
-  const unsave = async (id: string) => { try { await toggleSaved(id); } catch (e) { setError(errorText(e, "옷장에서 빼지 못했습니다.")); } };
 
   return <><SiteHeader/><main className="closet-page wrap">
     <div className="page-breadcrumb">ACCOUNT <span>/</span> MY CLOSET</div>
-    <div className="results-title-row"><div><span className="eyebrow">MY CLOSET / {user.nickname}</span><h1>나만의 옷장<span className="heading-period">.</span></h1><p>찜한 상품과 저장한 피팅 결과를 모아 봤어요.</p></div><div className="result-count">{String(items.length + fits.length).padStart(2, "0")}<span>SAVED</span></div></div>
+    <div className="results-title-row"><div><span className="eyebrow">MY CLOSET / {user.nickname}</span><h1>내 옷장<span className="heading-period">.</span></h1><p>가지고 있는 옷을 등록하면, 그 옷으로 입을 수 있는 코디를 찾아 드려요.</p></div><div className="result-count">{String(mine.length).padStart(2, "0")}<span>MY ITEMS</span></div></div>
     {error && <p className="ai-error" role="alert">{error}</p>}
 
-    <section className="products-section closet-section"><div className="section-heading"><div><span className="eyebrow">01 / SAVED ITEMS</span><h2>찜한 상품</h2></div></div>
-      {items.length === 0 ? <p className="vote-empty">아직 찜한 상품이 없어요. 상품 페이지에서 <Heart size={13}/> 를 눌러 담아 보세요.</p> : <>
-        {presentCats.length > 1 && <div className="category-chips"><Button variant="ghost" className={cat === "all" ? "active" : ""} onClick={() => setCat("all")}>전체 <small>{items.length}</small></Button>{presentCats.map(c => <Button variant="ghost" key={c.id} className={cat === c.id ? "active" : ""} onClick={() => setCat(c.id)}>{c.ko} <small>{items.filter(p => p.category === c.id).length}</small></Button>)}</div>}
-        <div className="product-grid">{shown.map(p => <div key={p.id} className="product-tile closet-item"><Link to="/product/$id" params={{ id: p.id }}><div className="product-image"><img src={p.image} alt={p.name} width={1024} height={1280} loading="lazy"/><span>{categoryOf(p.category).ko}</span></div><div className="product-meta"><span>{p.brand}</span><h3>{p.name}</h3><strong>₩{p.price}</strong></div></Link><Button size="sm" variant="ghost" className="closet-unsave" onClick={() => unsave(p.id)} aria-label={`${p.name} 옷장에서 빼기`}><Heart size={14} fill="currentColor"/> 빼기</Button></div>)}</div>
-      </>}
+    <section className="products-section closet-section"><div className="section-heading"><div><span className="eyebrow">01 / MY ITEMS</span><h2>내가 가진 옷</h2></div><Button variant={adding ? "default" : "outline"} onClick={() => setAdding(a => !a)}>{adding ? <><X size={15}/> 닫기</> : <><Plus size={15}/> 옷 추가하기</>}</Button></div>
+      {adding && <div className="closet-adder">
+        <div className="category-chips">{categories.map(c => <Button key={c.id} variant="ghost" className={addCat === c.id ? "active" : ""} onClick={() => setAddCat(c.id)}>{c.ko}</Button>)}</div>
+        <div className="closet-adder-list">{items.filter(i => i.category === addCat).map(i => <button type="button" key={i.id} className={saved.has(i.id) ? "selected" : ""} aria-pressed={saved.has(i.id)} onClick={() => toggle(i.id)}>{saved.has(i.id) ? "✓ " : "+ "}{i.name}</button>)}</div>
+      </div>}
+      {mine.length === 0 ? <p className="vote-empty">아직 등록한 옷이 없어요. "옷 추가하기"나 아이템 가이드의 "내 옷장에 추가"로 담아 보세요.</p>
+        : <div className="closet-chips">{categories.filter(c => mine.some(i => i.category === c.id)).map(c => <div key={c.id} className="closet-chip-group"><span>{c.ko}</span><div>{mine.filter(i => i.category === c.id).map(i => <span key={i.id} className="closet-chip"><Link to="/item/$id" params={{ id: i.id }}>{i.name}</Link><button type="button" aria-label={`${i.name} 옷장에서 빼기`} onClick={() => toggle(i.id)}><X size={12}/></button></span>)}</div></div>)}</div>}
     </section>
 
-    <section className="products-section closet-section"><div className="section-heading"><div><span className="eyebrow">02 / FITTING RESULTS</span><h2>저장한 피팅 결과</h2></div><Button asChild variant="link"><Link to="/fitting" search={{ item: "wide" }}>피팅하러 가기 <ArrowUpRight size={16}/></Link></Button></div>
+    <section className="products-section closet-section"><div className="section-heading"><div><span className="eyebrow">02 / OUTFITS FROM MY CLOSET</span><h2>내 옷으로 입을 수 있는 인기 코디</h2></div></div>
+      {outfits.length === 0 ? <p className="vote-empty">{mine.length === 0 ? "옷을 등록하면 여기에 코디가 나와요." : "아직 내 옷만으로 맞출 수 있는 코디가 없어요. 상의·하의·신발을 함께 등록해 보세요."}</p>
+        : <div className="insight-outfit-grid home-outfit-grid">{outfits.map(o => <div key={o.id} className="insight-outfit light"><strong>{o.title}</strong><OutfitPieces outfit={o.outfit} compact/><small>추천 {o.weight - 1} · {categoryOf(itemById(o.outfit.bottom.item)?.category ?? "bottom").ko} 기준</small></div>)}</div>}
+    </section>
+
+    <section className="products-section closet-section"><div className="section-heading"><div><span className="eyebrow">03 / FITTING RESULTS</span><h2>저장한 피팅 결과</h2></div><Button asChild variant="link"><Link to="/fitting" search={{ item: "wide" }}>피팅하러 가기 <ArrowUpRight size={16}/></Link></Button></div>
       {status === "loading" && <p className="vote-empty">불러오는 중…</p>}
       {status === "error" && <p className="vote-empty">옷장 서버에 연결할 수 없습니다.</p>}
       {status === "ready" && fits.length === 0 && <p className="vote-empty">아직 저장한 피팅 결과가 없어요. 가상 피팅에서 "옷장에 저장"을 눌러 보세요.</p>}

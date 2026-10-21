@@ -7,7 +7,7 @@ import { errorText, login, signup } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>) => ({ redirect: typeof search["redirect"] === "string" && search["redirect"].startsWith("/") ? search["redirect"] : "/" }),
-  head: () => ({ meta: [{ title: "로그인 — FORME" }, { name: "description", content: "로그인하고 나만의 옷장과 커뮤니티를 이용하세요." }] }),
+  head: () => ({ meta: [{ title: "로그인 — FYOF" }, { name: "description", content: "로그인하고 나만의 옷장과 커뮤니티를 이용하세요." }] }),
   component: Login,
 });
 
@@ -45,7 +45,7 @@ function Login() {
   return <><SiteHeader/><main className="auth-page wrap">
     <div className="page-breadcrumb">ACCOUNT <span>/</span> {mode === "login" ? "LOGIN" : "SIGN UP"}</div>
     <div className="auth-layout">
-      <div className="auth-intro"><span className="eyebrow">FORME ACCOUNT / 001</span><h1>{mode === "login" ? "WELCOME BACK" : "JOIN FORME"}<span className="heading-period">.</span></h1><p>로그인하면 찜한 상품과 피팅 결과를 나만의 옷장에 모아 두고,<br/>커뮤니티에 조합을 올리고 투표할 수 있어요.</p></div>
+      <div className="auth-intro"><span className="eyebrow">FYOF ACCOUNT / 001</span><h1>{mode === "login" ? "WELCOME BACK" : "JOIN FORME"}<span className="heading-period">.</span></h1><p>로그인하면 내 옷을 옷장에 등록해 입을 수 있는 코디를 찾고,<br/>커뮤니티에 코디를 올리고 추천할 수 있어요.</p></div>
       <form className="auth-form" onSubmit={submit}>
         <div className="vote-category" role="tablist">
           <Button type="button" role="tab" aria-selected={mode === "login"} variant="outline" className={mode === "login" ? "selected" : ""} onClick={() => { setMode("login"); setError(""); }}>로그인</Button>

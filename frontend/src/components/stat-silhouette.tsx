@@ -8,9 +8,9 @@ type OutfitSilhouetteProps = {
 
 // 고른 색조합으로 사람 실루엣의 상의·하의·신발을 칠해 보여준다. 색이 없는 부분은 바탕색으로 둔다.
 export function StatSilhouette({ top, bottom, shoes }: OutfitSilhouetteProps) {
-  const parts = [top && `상의 ${top.ko}`, bottom && `데님 ${bottom.ko}`, shoes && `신발 ${shoes.ko}`].filter(Boolean).join(", ");
+  const parts = [top && `상의 ${top.ko}`, bottom && `하의 ${bottom.ko}`, shoes && `신발 ${shoes.ko}`].filter(Boolean).join(", ");
   return <div className="stat-figure" role="img" aria-label={parts ? `사람 실루엣: ${parts}` : "사람 실루엣"}>
-    <div className="stat-figure-heading"><span>STYLE MAP</span><span>TOP · DENIM · SHOES</span></div>
+    <div className="stat-figure-heading"><span>STYLE MAP</span><span>TOP · BOTTOM · SHOES</span></div>
     <div className="stat-figure-body">
       <svg viewBox="0 0 220 370" aria-hidden="true" focusable="false">
         <ellipse className="silhouette-base" cx="110" cy="30" rx="21" ry="25"/>
@@ -23,7 +23,7 @@ export function StatSilhouette({ top, bottom, shoes }: OutfitSilhouetteProps) {
         </g>
       </svg>
       <ul className="stat-figure-legend">
-        {[["상의", top], ["데님", bottom], ["신발", shoes]].map(([label, c]) => {
+        {[["상의", top], ["하의", bottom], ["신발", shoes]].map(([label, c]) => {
           const color = c as PaletteColor | undefined;
           return <li key={label as string}><i style={{ background: color?.hex ?? "transparent" }}/><span>{label as string}</span><strong>{color?.ko ?? "—"}</strong></li>;
         })}
