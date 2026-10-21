@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -32,17 +33,18 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * STYLE INDEX 커뮤니티 투표. 사람들이 어울리는 색조합/패션 아이템을 하나씩 올리고 투표한다.
- *   GET    /api/style-posts?lookId=wide&category=ALL|COLOR|ITEM&sort=votes|recent&voterId=...
- *   POST   /api/style-posts               { lookId, category, title, colors[], comment, nickname, voterId }
- *   PUT    /api/style-posts/{id}          { voterId, title, colors[], comment }   -> 본인 글만
- *   DELETE /api/style-posts/{id}?voterId=...                                     -> 본인 글만
- *   POST   /api/style-posts/{id}/vote     { voterId }  -> 투표 토글 { votes, voted }
- *   POST   /api/style-posts/{id}/report   { voterId }  -> 신고 { reported, hidden }
- *   GET    /api/style-posts/ranking?voterId=...         -> 추천을 많이 받은 사람 순위
+ *   GET    /api/style-posts?lookId=wide&category=ALL|COLOR|ITEM&sort=votes|recent
+ *   POST   /api/style-posts               { lookId, category, title, colors[], comment, ... }  -> 로그인 필요
+ *   PUT    /api/style-posts/{id}          { title, colors[], comment, ... }   -> 본인 글만
+ *   DELETE /api/style-posts/{id}                                          -> 본인 글만
+ *   POST   /api/style-posts/{id}/vote     -> 투표 토글 { votes, voted }   (로그인 필요)
+ *   POST   /api/style-posts/{id}/report   -> 신고 { reported, hidden }    (로그인 필요)
+ *   GET    /api/style-posts/ranking       -> 추천을 많이 받은 사람 순위
  *   GET    /api/style-posts/stats?lookId=wide&gender=&age= -> STYLE DATA 집계 (색조합별 비중, 인기 아이템)
  * 색조합(COLOR) 글은 데님/상의/신발 색을 StylePalette 목록에서 하나씩 골라야 집계할 수 있다.
- * 로그인이 없으므로 브라우저마다 만든 voterId 로 작성자와 투표자를 구분한다.
- * voterId 는 본인 확인용이라 응답에는 절대 내보내지 않고 mine/me 같은 true/false 로만 알려준다.
+ * 읽기는 누구나, 쓰기·투표·신고는 로그인한 사람만 할 수 있다 (Authorization: Bearer 토큰).
+ * 작성자·투표자는 "u:사용자번호" 로 저장하고, 응답에는 mine/me 같은 true/false 로만 알려준다.
+ * (1차 때 브라우저 ID 로 쌓인 글·투표는 그대로 보이지만 누구의 글로도 인식되지 않는다.)
  */
 @RestController
 @RequestMapping("/api/style-posts")
@@ -66,10 +68,9 @@ public class StyleVoteController {
                             int votes, boolean voted, boolean mine, boolean reported, boolean authorBadge) {}
 
     public record NewPost(String lookId, String category, String title, List<String> colors, String comment,
-                          String nickname, String voterId,
                           String bottomColor, String topColor, String shoeColor, String gender, String ageGroup) {}
 
-    public record EditPost(String voterId, String title, List<String> colors, String comment,
+    public record EditPost(String title, List<String> colors, String comment,
                            String bottomColor, String topColor, String shoeColor) {}
 
     /** 색조합 하나와 그 비중(글 1개 = 1, 받은 추천 1개 = 1). */
@@ -80,8 +81,6 @@ public class StyleVoteController {
     public record Stats(int posts, List<Combo> combos, List<Item> items) {}
 
     private record Slots(String bottom, String top, String shoe) {}
-
-    public record VoteRequest(String voterId) {}
 
     public record RankEntry(int rank, String nickname, int posts, int votes, boolean badge, boolean me) {}
 
@@ -98,19 +97,21 @@ public class StyleVoteController {
             + " OR (a.posts >= " + BADGE_ACTIVE_POSTS + " AND a.received >= " + BADGE_ACTIVE_VOTES + "))";
 
     private final JdbcTemplate jdbc;
+    private final AuthService auth;
     private volatile boolean schemaReady;
 
-    public StyleVoteController(JdbcTemplate jdbc) {
+    public StyleVoteController(JdbcTemplate jdbc, AuthService auth) {
         this.jdbc = jdbc;
+        this.auth = auth;
     }
 
     @GetMapping
     public List<StylePost> list(@RequestParam(defaultValue = "wide") String lookId,
                                 @RequestParam(defaultValue = "ALL") String category,
                                 @RequestParam(defaultValue = "votes") String sort,
-                                @RequestParam(defaultValue = "") String voterId) {
+                                @RequestHeader(value = "Authorization", required = false) String authorization) {
         ensureSchema();
-        String me = trim(voterId, 64);
+        String me = auth.current(authorization).map(AuthService.User::key).orElse("");
         List<Object> args = new ArrayList<>(List.of(me, me, me, lookId));
         String where = "WHERE p.look_id = ? AND p.hidden = 0";
         if (CATEGORIES.contains(category)) {
@@ -133,7 +134,8 @@ public class StyleVoteController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public StylePost create(@RequestBody NewPost req) {
+    public StylePost create(@RequestBody NewPost req, @RequestHeader(value = "Authorization", required = false) String authorization) {
+        AuthService.User user = auth.require(authorization);
         ensureSchema();
         String lookId = LOOKS.contains(req.lookId()) ? req.lookId() : "wide";
         if (!CATEGORIES.contains(req.category())) throw bad("분류가 올바르지 않습니다.");
@@ -141,10 +143,9 @@ public class StyleVoteController {
         if (title.isEmpty()) throw bad("조합 이름을 입력해 주세요.");
         List<String> colors = colors(req.colors());
         String comment = trim(req.comment(), 200);
-        String nickname = trim(req.nickname(), 12);
-        if (nickname.isEmpty()) nickname = "익명";
-        if (ProfanityFilter.contains(title, comment, nickname)) throw bad("부적절한 표현이 들어 있어요. 고쳐서 다시 올려 주세요.");
-        String author = trim(req.voterId(), 64);
+        String nickname = user.nickname();
+        if (ProfanityFilter.contains(title, comment)) throw bad("부적절한 표현이 들어 있어요. 고쳐서 다시 올려 주세요.");
+        String author = user.key();
         Slots slots = slots(req.category(), req.bottomColor(), req.topColor(), req.shoeColor());
         if (slots != null) colors = slotHexes(slots);
         String gender = StylePalette.GENDERS.contains(req.gender()) ? req.gender() : "";
@@ -155,9 +156,9 @@ public class StyleVoteController {
     }
 
     @PutMapping("/{id}")
-    public StylePost edit(@PathVariable long id, @RequestBody EditPost req) {
+    public StylePost edit(@PathVariable long id, @RequestBody EditPost req, @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String me = auth.require(authorization).key();
         ensureSchema();
-        String me = requireVoter(req.voterId());
         requireOwner(id, me);
         String title = trim(req.title(), 40);
         if (title.isEmpty()) throw bad("조합 이름을 입력해 주세요.");
@@ -176,17 +177,17 @@ public class StyleVoteController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable long id, @RequestParam(defaultValue = "") String voterId) {
+    public void delete(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String me = auth.require(authorization).key();
         ensureSchema();
-        String me = requireVoter(voterId);
         requireOwner(id, me);
         jdbc.update("DELETE FROM style_posts WHERE id = ?", id); // 투표·신고는 FK CASCADE 로 같이 지워진다
     }
 
     @PostMapping("/{id}/vote")
-    public Map<String, Object> vote(@PathVariable long id, @RequestBody VoteRequest req) {
+    public Map<String, Object> vote(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String voterId = auth.require(authorization).key();
         ensureSchema();
-        String voterId = requireVoter(req.voterId());
         requireVisible(id);
 
         // 이미 투표했으면 취소, 아니면 투표
@@ -203,9 +204,9 @@ public class StyleVoteController {
     }
 
     @PostMapping("/{id}/report")
-    public Map<String, Object> report(@PathVariable long id, @RequestBody VoteRequest req) {
+    public Map<String, Object> report(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String me = auth.require(authorization).key();
         ensureSchema();
-        String me = requireVoter(req.voterId());
         requireVisible(id);
         String author = jdbc.queryForObject("SELECT author_id FROM style_posts WHERE id = ?", String.class, id);
         if (me.equals(author)) throw bad("내 글은 신고할 수 없어요.");
@@ -224,9 +225,9 @@ public class StyleVoteController {
     }
 
     @GetMapping("/ranking")
-    public List<RankEntry> ranking(@RequestParam(defaultValue = "") String voterId) {
+    public List<RankEntry> ranking(@RequestHeader(value = "Authorization", required = false) String authorization) {
         ensureSchema();
-        String me = trim(voterId, 64);
+        String me = auth.current(authorization).map(AuthService.User::key).orElse("");
         List<RankEntry> rows = jdbc.query("""
                 SELECT a.posts, a.received, %s AS badge, (a.author_id = ?) AS me,
                        (SELECT x.nickname FROM style_posts x WHERE x.author_id = a.author_id AND x.hidden = 0
@@ -431,12 +432,6 @@ public class StyleVoteController {
     private void requireVisible(long id) {
         Integer exists = jdbc.queryForObject("SELECT COUNT(*) FROM style_posts WHERE id = ? AND hidden = 0", Integer.class, id);
         if (exists == null || exists == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "의견을 찾을 수 없습니다.");
-    }
-
-    private static String requireVoter(String voterId) {
-        String id = trim(voterId, 64);
-        if (id.isEmpty()) throw bad("voterId 가 필요합니다.");
-        return id;
     }
 
     /** COLOR 글이면 세 칸이 모두 팔레트 안의 색인지 확인한다. ITEM 글이면 null. */

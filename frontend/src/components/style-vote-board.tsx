@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ArrowUpRight, ChevronDown, Crown, Flag, Heart, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { api, errorText } from "@/lib/api";
+import { useUser } from "@/lib/session";
 import { ages, colorById, denimColors, genders, wearColors, type PaletteColor } from "@/lib/palette";
 
 type Category = "COLOR" | "ITEM";
@@ -13,29 +15,6 @@ type Draft = { title: string; comment: string; colors: string[] } & Slots;
 const filters = [{ id: "ALL", label: "전체" }, { id: "COLOR", label: "색조합" }, { id: "ITEM", label: "아이템" }] as const;
 const defaultColors = ["#F1F0EC", "#2F3B7A", "#2E2E2E"];
 
-// 로그인이 없으므로 브라우저별 익명 ID 로 작성자와 투표자를 구분한다.
-// crypto.randomUUID 는 https·localhost 에서만 있어서, http 서버(1차 VM)에서는 모두 "guest" 가 되어
-// 다른 사람이 누르면 내 투표가 취소되는 버그가 있었다. getRandomValues 는 http 에서도 동작한다.
-function newId() {
-  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
-    return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
-  }
-  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
-}
-
-let memoryId: string | null = null; // localStorage 를 못 쓰는 환경(시크릿 창 등)에서는 탭이 열려 있는 동안만 유지
-function voterId() {
-  try {
-    const saved = localStorage.getItem("fyof-voter");
-    if (saved && saved !== "guest") return saved;
-    const id = newId();
-    localStorage.setItem("fyof-voter", id);
-    return id;
-  } catch {
-    return memoryId ??= newId();
-  }
-}
-
 function timeAgo(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 60000;
   if (diff < 1) return "방금";
@@ -43,8 +22,6 @@ function timeAgo(iso: string) {
   if (diff < 1440) return `${Math.floor(diff / 60)}시간 전`;
   return `${Math.floor(diff / 1440)}일 전`;
 }
-
-const errorText = (e: unknown, fallback: string) => e instanceof Error && !e.message.startsWith("API ") && e.message !== "Failed to fetch" ? e.message : fallback;
 
 function ColorPicker({ colors, setColors, min }: { colors: string[]; setColors: (update: (list: string[]) => string[]) => void; min: number }) {
   return <div className="vote-colors">
@@ -82,7 +59,10 @@ export function StyleVoteBoard({ lookId, lookTitle, onChange }: { lookId: string
   const [colors, setColors] = useState<string[]>(defaultColors.slice(2, 3)) // 아이템 글의 대표 색;
   const [title, setTitle] = useState("");
   const [comment, setComment] = useState("");
-  const [nickname, setNickname] = useState("");
+  const user = useUser();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const goLogin = () => navigate({ to: "/login", search: { redirect: location.href } });
   const [slots, setSlots] = useState<Slots>(emptySlots);
   const [gender, setGender] = useState("");
   const [age, setAge] = useState("");
@@ -93,31 +73,34 @@ export function StyleVoteBoard({ lookId, lookTitle, onChange }: { lookId: string
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
   const loadRanking = useCallback(async () => {
-    try { setRanking(await api<RankEntry[]>(`/api/style-posts/ranking?voterId=${voterId()}`)); } catch { /* 순위는 없어도 게시판은 보이게 둔다 */ }
+    try { setRanking(await api<RankEntry[]>("/api/style-posts/ranking")); } catch { /* 순위는 없어도 게시판은 보이게 둔다 */ }
   }, []);
 
   const load = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ lookId, category: filter, sort: sort === "최신순" ? "recent" : "votes", voterId: voterId() });
+      const params = new URLSearchParams({ lookId, category: filter, sort: sort === "최신순" ? "recent" : "votes" });
       setPosts(await api<StylePost[]>(`/api/style-posts?${params}`));
       setStatus("ready");
     } catch { setStatus("error"); }
   }, [lookId, filter, sort]);
 
-  useEffect(() => { void load(); }, [load]);
-  useEffect(() => { void loadRanking(); }, [loadRanking]);
+  // 로그인·로그아웃하면 내 글/내 투표 표시가 바뀌므로 다시 불러온다
+  useEffect(() => { void load(); }, [load, user]);
+  useEffect(() => { void loadRanking(); }, [loadRanking, user]);
 
   const vote = async (post: StylePost) => {
+    if (!user) { await goLogin(); return; }
     try {
-      const res = await api<{ votes: number; voted: boolean }>(`/api/style-posts/${post.id}/vote`, { method: "POST", body: JSON.stringify({ voterId: voterId() }) });
+      const res = await api<{ votes: number; voted: boolean }>(`/api/style-posts/${post.id}/vote`, { method: "POST" });
       setPosts(list => list.map(p => p.id === post.id ? { ...p, ...res } : p));
       void loadRanking(); onChange?.();
     } catch (e) { setNotice({ id: post.id, text: errorText(e, "투표하지 못했습니다.") }); }
   };
 
   const report = async (post: StylePost) => {
+    if (!user) { await goLogin(); return; }
     try {
-      const res = await api<{ reported: boolean; hidden: boolean }>(`/api/style-posts/${post.id}/report`, { method: "POST", body: JSON.stringify({ voterId: voterId() }) });
+      const res = await api<{ reported: boolean; hidden: boolean }>(`/api/style-posts/${post.id}/report`, { method: "POST" });
       if (res.hidden) { setPosts(list => list.filter(p => p.id !== post.id)); void loadRanking(); onChange?.(); }
       else setPosts(list => list.map(p => p.id === post.id ? { ...p, reported: true } : p));
     } catch (e) { setNotice({ id: post.id, text: errorText(e, "신고하지 못했습니다.") }); }
@@ -125,7 +108,7 @@ export function StyleVoteBoard({ lookId, lookTitle, onChange }: { lookId: string
 
   const remove = async (post: StylePost) => {
     try {
-      await api<void>(`/api/style-posts/${post.id}?voterId=${voterId()}`, { method: "DELETE" });
+      await api<void>(`/api/style-posts/${post.id}`, { method: "DELETE" });
       setPosts(list => list.filter(p => p.id !== post.id));
       setConfirmDelete(null);
       void loadRanking(); onChange?.();
@@ -141,7 +124,7 @@ export function StyleVoteBoard({ lookId, lookTitle, onChange }: { lookId: string
     if (post?.category === "COLOR" && (!draft.bottom || !draft.top || !draft.shoe)) { setNotice({ id, text: "데님·상의·신발 색을 모두 골라 주세요." }); return; }
     try {
       const { bottom, top, shoe, ...rest } = draft;
-      const updated = await api<StylePost>(`/api/style-posts/${id}`, { method: "PUT", body: JSON.stringify({ voterId: voterId(), ...rest, bottomColor: bottom, topColor: top, shoeColor: shoe }) });
+      const updated = await api<StylePost>(`/api/style-posts/${id}`, { method: "PUT", body: JSON.stringify({ ...rest, bottomColor: bottom, topColor: top, shoeColor: shoe }) });
       setPosts(list => list.map(p => p.id === id ? updated : p));
       setEditing(null); setNotice(null); onChange?.();
     } catch (err) { setNotice({ id, text: errorText(err, "수정하지 못했습니다.") }); }
@@ -154,7 +137,7 @@ export function StyleVoteBoard({ lookId, lookTitle, onChange }: { lookId: string
     if (!finalTitle) { setFormError("아이템 이름을 입력해 주세요."); return; }
     setSending(true); setFormError("");
     try {
-      const body = { lookId, category, title: finalTitle, colors, comment, nickname, voterId: voterId(), gender, ageGroup: age, bottomColor: slots.bottom, topColor: slots.top, shoeColor: slots.shoe };
+      const body = { lookId, category, title: finalTitle, colors, comment, gender, ageGroup: age, bottomColor: slots.bottom, topColor: slots.top, shoeColor: slots.shoe };
       const created = await api<StylePost>("/api/style-posts", { method: "POST", body: JSON.stringify(body) });
       setTitle(""); setComment(""); setSlots(emptySlots);
       if (filter === "ALL" || filter === created.category) setPosts(list => sort === "최신순" ? [created, ...list] : [...list, created]);
@@ -211,7 +194,12 @@ export function StyleVoteBoard({ lookId, lookTitle, onChange }: { lookId: string
         })}</ol>}
       </div>
       <div className="vote-side">
-        <form className="vote-form" onSubmit={submit}>
+        {!user ? <div className="vote-form vote-login">
+          <span className="fit-control-heading">SUGGEST A MATCH</span>
+          <h3>나만의 조합 올리기</h3>
+          <p className="vote-form-note">로그인하면 {lookTitle}에 어울리는 조합을 올리고 투표할 수 있어요. 한 계정에 한 표씩이라 순위가 공정해져요.</p>
+          <Button asChild className="vote-submit"><Link to="/login" search={{ redirect: location.href }}>로그인하고 참여하기 <ArrowUpRight size={16}/></Link></Button>
+        </div> : <form className="vote-form" onSubmit={submit}>
           <span className="fit-control-heading">SUGGEST A MATCH</span>
           <h3>나만의 조합 올리기</h3>
           <p className="vote-form-note">{lookTitle}에 어울리는 색조합이나 아이템을 하나씩 제안해 주세요.</p>
@@ -226,8 +214,7 @@ export function StyleVoteBoard({ lookId, lookTitle, onChange }: { lookId: string
           <input id="vote-title" className="vote-input" maxLength={40} value={title} onChange={e => setTitle(e.target.value)} placeholder={category === "COLOR" ? (slots.bottom && slots.top ? comboTitle(slots) : "예) 화이트 상의 + 인디고 데님") : "예) 브라운 더비 슈즈"}/>
           <label className="vote-label" htmlFor="vote-comment">한마디</label>
           <textarea id="vote-comment" className="vote-input vote-textarea" maxLength={200} value={comment} onChange={e => setComment(e.target.value)} placeholder="왜 어울리는지 짧게 남겨주세요"/>
-          <label className="vote-label" htmlFor="vote-nickname">닉네임</label>
-          <input id="vote-nickname" className="vote-input" maxLength={12} value={nickname} onChange={e => setNickname(e.target.value)} placeholder="익명"/>
+          <p className="vote-form-note vote-as">{user.nickname} 이름으로 올라가요.</p>
           <label className="vote-label">성별 · 연령 (선택, 통계 필터에만 쓰여요)</label>
           <div className="vote-demographics">
             <div className="select-wrap"><select aria-label="성별" value={gender} onChange={e => setGender(e.target.value)}>{genders.map(g => <option key={g.id} value={g.id}>{g.id ? g.ko : "성별"}</option>)}</select><ChevronDown size={14}/></div>
@@ -235,7 +222,7 @@ export function StyleVoteBoard({ lookId, lookTitle, onChange }: { lookId: string
           </div>
           {formError && <p className="ai-error">{formError}</p>}
           <Button type="submit" className="vote-submit" disabled={sending}>{sending ? "올리는 중…" : "의견 올리기"} <ArrowUpRight size={16}/></Button>
-        </form>
+        </form>}
         <div className="vote-ranking">
           <span className="fit-control-heading">FASHIONISTA RANKING</span>
           <h3>추천 많이 받은 사람</h3>

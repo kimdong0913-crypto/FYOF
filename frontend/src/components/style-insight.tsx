@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { StatSilhouette } from "@/components/stat-silhouette";
+import { ComboRecommend } from "@/components/combo-recommend";
 import { api } from "@/lib/api";
 import { colorById, denimColors, wearColors, type PaletteColor } from "@/lib/palette";
 
@@ -80,6 +81,7 @@ export function StyleInsight({ lookId, lookTitle, gender, age, filterLabel, vers
           <div><span className="insight-pair-title">{bottomColor?.ko} 데님과 어울리는 <strong>상의 색</strong></span><Bars small rows={tops} selected={top} onSelect={id => setPick(p => ({ ...p, bottom, top: id }))}/></div>
           <div><span className="insight-pair-title">{bottomColor?.ko} 데님과 어울리는 <strong>신발 색</strong></span><Bars small rows={shoes} selected={shoe} onSelect={id => setPick(p => ({ ...p, bottom, shoe: id }))}/></div>
         </div>
+        <ComboRecommend top={colorById(top)} bottom={bottomColor} shoes={colorById(shoe)}/>
       </>)}
     {status === "ready" && view === "ITEM" && (items.length === 0
       ? <p className="insight-empty">아직 {filterLabel} 기준으로 올라온 아이템이 없어요.</p>

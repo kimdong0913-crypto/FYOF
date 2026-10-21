@@ -20,6 +20,8 @@ repositories {
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+	// 비밀번호를 BCrypt 로 암호화해서 저장 (Spring Security 전체가 아니라 암호화 부분만 쓴다)
+	implementation 'org.springframework.security:spring-security-crypto'
 	runtimeOnly 'com.mysql:mysql-connector-j'
 	// Google Cloud SQL(MySQL) 인스턴스에 연결 이름으로 접속하게 해 주는 소켓 팩토리
 	runtimeOnly 'com.google.cloud.sql:mysql-socket-factory-connector-j-8:1.30.0'
