@@ -147,3 +147,50 @@
 .category-chips button:hover,.category-chips button.active { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
 .category-chips button:hover small,.category-chips button.active small { color: inherit; opacity: .7; }
 .detail-gallery-single { grid-template-columns: 1fr; max-width: 560px; }
+.vote-side { display: flex; flex-direction: column; gap: 36px; min-width: 0; }
+.vote-item-mine { background: linear-gradient(90deg, var(--surface-soft), transparent 70%); }
+.vote-author { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vote-author em { font-style: normal; color: var(--foreground); }
+.fashionista-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; background: var(--highlight); color: var(--foreground); font-size: 9px; letter-spacing: .06em; }
+.vote-owner-actions { display: flex; align-items: center; gap: 2px; margin-top: 10px; flex-wrap: wrap; }
+.vote-owner-actions button { height: 28px; padding: 0 8px; border-radius: 0; font-size: 11px; font-weight: 700; color: var(--muted-foreground); box-shadow: none; gap: 4px; }
+.vote-owner-actions button:hover { color: var(--foreground); }
+.vote-owner-actions button.danger { color: var(--destructive); }
+.vote-owner-actions button[type="submit"] { background: var(--foreground); color: var(--background); }
+.vote-confirm { font-size: 11px; font-weight: 700; margin-right: 4px; }
+.vote-edit { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.vote-ranking { border-top: 2px solid var(--foreground); padding-top: 19px; }
+.vote-ranking h3 { font-size: 20px; margin: 9px 0 12px; }
+.vote-ranking ol { list-style: none; margin: 0; padding: 0; }
+.vote-ranking li { display: grid; grid-template-columns: 26px minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 11px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.vote-ranking li.me { font-weight: 800; }
+.vote-ranking .rank-no { font-size: 12px; font-weight: 800; }
+.vote-ranking .rank-name { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; overflow-wrap: anywhere; }
+.vote-ranking .rank-name em { font-style: normal; color: var(--muted-foreground); font-weight: 600; }
+.vote-ranking .rank-score { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted-foreground); font-weight: 700; }
+.vote-badge-rule { display: flex; gap: 6px; align-items: flex-start; font-size: 11px; color: var(--muted-foreground); line-height: 1.6; margin: 14px 0 0; }
+.vote-badge-rule svg { flex: none; margin-top: 3px; }
+.silhouette-part { stroke: var(--primary-foreground); stroke-width: 1.2; transition: fill .3s ease; }
+.stat-figure-legend { position: absolute; right: 12px; bottom: 10px; list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.stat-figure-legend li { display: grid; grid-template-columns: 12px auto auto; align-items: center; gap: 6px; font-size: 10px; color: var(--surface-dark-muted); }
+.stat-figure-legend i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
+.stat-figure-legend strong { color: var(--primary-foreground); font-weight: 800; }
+.bar-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); flex: none; }
+.bar-row-static { cursor: default; }
+.bar-row-static:hover { background: transparent; border-color: transparent; }
+.insight-empty { padding: 48px 0 10px; margin: 0; color: var(--surface-dark-muted); font-size: 13px; }
+.insight-pairs { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 34px; padding-top: 28px; border-top: 1px solid var(--line-dark); }
+.insight-pair-title { display: block; font-size: 12px; color: var(--surface-dark-muted); margin-bottom: 10px; }
+.insight-pair-title strong { color: var(--primary-foreground); }
+.insight-bars-small { gap: 4px; }
+.insight-bars-small .bar-row { min-height: 48px; }
+.insight-bars-small .bar-head strong { font-size: 16px; }
+.slot-pickers { display: grid; gap: 12px; }
+.swatch-picker-label { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+.swatch-picker-label strong { font-weight: 800; color: var(--muted-foreground); }
+.swatch-picker > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatch-picker button { width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.swatch-picker button.selected { outline: 2px solid var(--foreground); outline-offset: 2px; }
+.vote-demographics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vote-demographics select { width: 100%; }
+@media (max-width: 720px) { .insight-pairs { grid-template-columns: 1fr; } }

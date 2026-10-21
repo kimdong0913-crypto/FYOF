@@ -78,11 +78,3 @@ export function searchProducts(q: string): Product[] {
     return c.keywords.some(k => query.includes(k) || k.includes(query)) || p.name.toLowerCase().includes(query) || p.color.includes(query);
   });
 }
-
-export const stats = {
-  colors: [{ label: "인디고", value: 42, swatch: "#4353A8" }, { label: "미드 블루", value: 29, swatch: "#6E8FC4" }, { label: "블랙", value: 18, swatch: "#2E2E2E" }, { label: "라이트 블루", value: 11, swatch: "#AFC7E3" }],
-  types: [{ label: "와이드 데님", value: 46, swatch: "#35418F" }, { label: "스트레이트 데님", value: 34, swatch: "#5A77B8" }, { label: "릴랙스 데님", value: 20, swatch: "#9DB8DA" }],
-  shoeColors: [{ label: "블랙", value: 48, swatch: "#2E2E2E" }, { label: "화이트", value: 32, swatch: "#F1F0EC" }, { label: "브라운", value: 12, swatch: "#8A5A34" }, { label: "기타", value: 8, swatch: "#6B6B6B" }],
-  shoes: [{ label: "블랙 로퍼", value: 38, swatch: "#2E2E2E" }, { label: "화이트 스니커즈", value: 32, swatch: "#F1F0EC" }, { label: "부츠", value: 20, swatch: "#8A5A34" }, { label: "기타", value: 10, swatch: "#6B6B6B" }],
-  outers: [{ label: "블레이저", value: 44, swatch: "#4A4A4A" }, { label: "가죽 재킷", value: 29, swatch: "#2B2B2B" }, { label: "셔츠", value: 17, swatch: "#F1F0EC" }, { label: "기타", value: 10, swatch: "#6B6B6B" }],
-};
