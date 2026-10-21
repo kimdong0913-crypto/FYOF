@@ -141,3 +141,9 @@
 @media (max-width: 900px) { .vote-layout { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .vote-section { padding-top: 70px; }.vote-total { width: 100%; margin-left: 0; }.vote-item { grid-template-columns: 28px minmax(0,1fr) auto; gap: 10px; }.vote-body h3 { font-size: 15px; }.vote-button { min-width: 54px; } }
 @media (prefers-reduced-motion: reduce) { .vote-track span { transition: none; } }
+.category-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -12px 0 28px; }
+.category-chips button { height: auto; padding: 8px 14px; border: 1px solid var(--border); border-radius: 0; font-size: 12px; font-weight: 700; box-shadow: none; }
+.category-chips button small { font-size: 10px; color: var(--muted-foreground); margin-left: 4px; }
+.category-chips button:hover,.category-chips button.active { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.category-chips button:hover small,.category-chips button.active small { color: inherit; opacity: .7; }
+.detail-gallery-single { grid-template-columns: 1fr; max-width: 560px; }
