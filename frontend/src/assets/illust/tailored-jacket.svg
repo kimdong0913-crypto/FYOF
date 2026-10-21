@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280" viewBox="0 0 1024 1280">
+  <defs>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000" flood-opacity=".16"/></filter>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#535357"/><stop offset="1" stop-color="#434346"/></linearGradient>
+  </defs>
+  <rect width="1024" height="1280" fill="#ecebe7"/>
+  <g filter="url(#sh)" stroke="#2b2b2e" stroke-width="3" stroke-linejoin="round">
+    <!-- sleeves -->
+    <path d="M338 288 C298 304 278 346 270 410 L236 890 C262 900 292 902 320 896 L356 470 Z" fill="#4a4a4e"/>
+    <path d="M686 288 C726 304 746 346 754 410 L788 890 C762 900 732 902 704 896 L668 470 Z" fill="#4a4a4e"/>
+    <!-- body -->
+    <path d="M338 288 L424 250 L512 330 L600 250 L686 288 C700 400 706 500 700 610 L712 1012 C640 1022 384 1022 312 1012 L324 610 C318 500 324 400 338 288 Z" fill="url(#body)"/>
+    <!-- shirt in the opening -->
+    <path d="M436 262 L512 604 L588 262 C560 296 464 296 436 262 Z" fill="#f4f3ef"/>
+    <path d="M490 300 L512 420 L534 300" fill="none" stroke="#c9c8c3" stroke-width="2"/>
+    <!-- back collar -->
+    <path d="M424 250 C456 236 568 236 600 250 L588 266 C556 254 468 254 436 266 Z" fill="#3c3c3f"/>
+    <!-- lapels -->
+    <path d="M436 262 L398 342 L430 354 L414 376 L508 600 L512 604 Z" fill="#3e3e41"/>
+    <path d="M588 262 L626 342 L594 354 L610 376 L516 600 L512 604 Z" fill="#3e3e41"/>
+  </g>
+  <g stroke="#2b2b2e" stroke-width="3" fill="none" stroke-linecap="round">
+    <!-- front edge with cutaway -->
+    <path d="M512 604 L514 950 C514 985 500 1006 474 1014"/>
+    <!-- flap pockets -->
+    <path d="M356 800 L462 796 L460 826 L358 830 Z" fill="#46464a"/>
+    <path d="M668 800 L562 796 L564 826 L666 830 Z" fill="#46464a"/>
+    <!-- chest welt -->
+    <path d="M580 478 L652 472 L653 488 L581 494 Z" fill="#46464a"/>
+    <!-- sleeve cuffs / seams -->
+    <path d="M244 846 C270 852 296 852 322 848" stroke="#38383b"/>
+    <path d="M780 846 C754 852 728 852 702 848" stroke="#38383b"/>
+    <path d="M356 470 C350 420 344 360 338 288" stroke="#3a3a3d" stroke-width="2"/>
+    <path d="M668 470 C674 420 680 360 686 288" stroke="#3a3a3d" stroke-width="2"/>
+  </g>
+  <!-- buttons -->
+  <g fill="#1e1e20"><circle cx="530" cy="660" r="11"/><circle cx="530" cy="760" r="11"/></g>
+  <g fill="#6a6a6e"><circle cx="527" cy="657" r="3"/><circle cx="527" cy="757" r="3"/></g>
+  <!-- light -->
+  <path d="M360 330 C352 420 350 520 352 600" stroke="#ffffff" stroke-opacity=".08" stroke-width="18" fill="none" stroke-linecap="round"/>
+</svg>

@@ -3,6 +3,10 @@ import straight from "@/assets/look-straight.jpg";
 import relaxed from "@/assets/look-relaxed.jpg";
 import denim from "@/assets/product-denim.jpg";
 
+// 사진 대신 쓰는 SVG 일러스트 (AI 피팅에는 쓸 수 없어 hasPhoto는 false)
+const illust = import.meta.glob<string>("@/assets/illust/*.svg", { eager: true, import: "default", query: "?url" });
+const illustFor = (id: string) => Object.entries(illust).find(([path]) => path.endsWith(`/${id}.svg`))?.[1];
+
 export const looks = [
   { id: "wide", rank: "01", title: "와이드 데님", english: "WIDE LEG", style: "미니멀", image: wide, description: "화이트 셔츠 + 다크 인디고 데님", match: 94, color: "화이트", type: "와이드", shoe: "블랙 로퍼", outer: "테일러드 재킷", price: "89,000" },
   { id: "straight", rank: "02", title: "스트레이트 데님", english: "STRAIGHT", style: "클래식", image: straight, description: "차콜 블레이저 + 미드 블루 데님", match: 89, color: "차콜", type: "스트레이트", shoe: "블랙 로퍼", outer: "오버핏 블레이저", price: "79,000" },
@@ -34,7 +38,7 @@ type Product = {
   tag: string; fit: string; color: string; description: string;
 };
 
-const draft = (p: Omit<Product, "image" | "hasPhoto">): Product => ({ ...p, image: placeholder(p.category, p.name), hasPhoto: false });
+const draft = (p: Omit<Product, "image" | "hasPhoto">): Product => ({ ...p, image: illustFor(p.id) ?? placeholder(p.category, p.name), hasPhoto: false });
 
 export const products: Product[] = [
   // OUTER
