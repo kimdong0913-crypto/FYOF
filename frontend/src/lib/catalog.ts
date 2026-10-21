@@ -2,11 +2,9 @@ import wide from "@/assets/look-wide.jpg";
 import straight from "@/assets/look-straight.jpg";
 import relaxed from "@/assets/look-relaxed.jpg";
 import denim from "@/assets/product-denim.jpg";
-import type { PaletteColor } from "@/lib/palette";
+import { flatImage } from "@/lib/flats";
+import { colorById, type PaletteColor } from "@/lib/palette";
 
-// 사진 대신 쓰는 SVG 일러스트가 있으면 사용
-const illust = import.meta.glob<string>("@/assets/illust/*.svg", { eager: true, import: "default", query: "?url" });
-const illustFor = (id: string) => Object.entries(illust).find(([path]) => path.endsWith(`/${id}.svg`))?.[1];
 
 // 홈의 "오늘의 실루엣" (1차 때 찍은 데님 코디 사진)
 export const looks = [
@@ -44,7 +42,7 @@ export type Item = {
   image: string; hasPhoto: boolean; photoType?: "flat-lay" | "model";
 };
 
-// 실제 사진이 들어오기 전까지 쓰는 회색 자리표시 이미지
+// 도식 그림이 없는 아이템에 쓰는 회색 자리표시 이미지
 function placeholder(category: CategoryId, label: string) {
   const c = categories.find(x => x.id === category)!;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280" viewBox="0 0 1024 1280"><rect width="1024" height="1280" fill="#e4e4e2"/><text x="512" y="600" text-anchor="middle" font-family="Manrope,Noto Sans KR,sans-serif" font-size="44" font-weight="800" letter-spacing="6" fill="#8a8a88">${c.en}</text><text x="512" y="680" text-anchor="middle" font-family="Noto Sans KR,sans-serif" font-size="40" font-weight="700" fill="#a3a3a1">${label}</text></svg>`;
@@ -65,7 +63,8 @@ function build(category: CategoryId, defs: Def[]): Item[] {
       id, category, name, english, season, tips,
       colors: colors.split(" "),
       aliases: aliases ? aliases.split(" ") : [],
-      image: photo?.image ?? illustFor(id) ?? placeholder(category, name),
+      // 사진이 있으면 사진, 없으면 대표 색으로 칠한 도식 그림 (flats.ts)
+      image: photo?.image ?? flatImage(id, colorById(colors.split(" ")[0])?.hex ?? "#9A9A9A") ?? placeholder(category, name),
       hasPhoto: Boolean(photo),
       ...(photo ? { photoType: photo.photoType } : {}),
     };
