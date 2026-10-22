@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ArrowUpRight, ChevronDown, Flag, Heart, ImagePlus, Lightbulb, Pencil, Shirt, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LinkList, LinkTagEditor, TaggedPhoto, linksProblem, type LinkTag } from "@/components/link-tags";
 import { OutfitPieces } from "@/components/outfit-card";
 import { RankingPanel } from "@/components/ranking-panel";
 import { TierBadge } from "@/components/tier-badge";
@@ -13,8 +14,8 @@ import { ages, colorById, genders, palette } from "@/lib/palette";
 import { useUser } from "@/lib/session";
 
 type Category = "OUTFIT" | "TIP";
-type StylePost = { id: number; item: string; category: Category; title: string; colors: string[]; comment: string; nickname: string; createdAt: string; edited: boolean; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; reported: boolean; authorBadge: boolean; hasPhoto: boolean; authorUserId: number | null; authorTier: number };
-type Draft = { title: string; comment: string; outfit: Outfit; photo: "keep" | "remove" | Blob };
+type StylePost = { id: number; item: string; category: Category; title: string; colors: string[]; comment: string; nickname: string; createdAt: string; edited: boolean; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; reported: boolean; authorBadge: boolean; hasPhoto: boolean; authorUserId: number | null; authorTier: number; links: LinkTag[] };
+type Draft = { title: string; comment: string; outfit: Outfit; photo: "keep" | "remove" | Blob; links: LinkTag[] };
 
 const filters = [{ id: "ALL", label: "전체" }, { id: "OUTFIT", label: "코디" }, { id: "TIP", label: "팁" }] as const;
 
@@ -27,16 +28,17 @@ function timeAgo(iso: string) {
 }
 
 // 사진 고르기: 고르면 바로 줄여서(긴 변 1080px) 미리보기를 보여준다.
-function PhotoPicker({ value, current, onChange }: { value: Blob | null; current?: string | undefined; onChange: (b: Blob | null) => void }) {
+function PhotoPicker({ value, current, onChange, links, onLinksChange }: { value: Blob | null; current?: string | undefined; onChange: (b: Blob | null) => void; links: LinkTag[]; onLinksChange: (l: LinkTag[]) => void }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { if (!value) { setPreview(null); return; } const u = URL.createObjectURL(value); setPreview(u); return () => URL.revokeObjectURL(u); }, [value]);
   const shown = preview ?? current;
   return <div className="photo-picker">
-    {shown ? <div className="photo-preview"><img src={shown} alt="첨부한 사진 미리보기"/><button type="button" aria-label="사진 빼기" onClick={() => onChange(null)}><X size={14}/></button></div>
+    {shown ? <div className="photo-bar"><span>사진 1장 · 아래 사진을 눌러 구매처 태그를 달 수 있어요</span><button type="button" onClick={() => { onChange(null); onLinksChange(links.map(l => ({ ...l, x: null, y: null }))); }}><X size={13}/> 사진 빼기</button></div>
       : <label className="photo-drop"><ImagePlus size={20}/><span>내가 입은 사진 올리기 (선택)</span><small>얼굴이 나오는 사진은 모두에게 보여요</small>
           <input type="file" accept="image/*" hidden onChange={async e => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; setError(""); try { onChange(await shrinkImage(f)); } catch (err) { setError(errorText(err, "사진을 읽지 못했어요.")); } }}/></label>}
     {error && <p className="ai-error">{error}</p>}
+    <LinkTagEditor src={shown ?? null} links={links} onChange={onLinksChange}/>
   </div>;
 }
 
@@ -76,6 +78,7 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
   const [posts, setPosts] = useState<StylePost[]>([]);
   const [rankVersion, setRankVersion] = useState(0);
   const [photo, setPhoto] = useState<Blob | null>(null);
+  const [links, setLinks] = useState<LinkTag[]>([]);
   const [photoVersion, setPhotoVersion] = useState<Record<number, number>>({});
   const [filter, setFilter] = useState<(typeof filters)[number]["id"]>("ALL");
   const [sort, setSort] = useState("인기순");
@@ -105,6 +108,7 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
   useEffect(() => { void load(); }, [load, user]);
 
   const changed = () => { setRankVersion(v => v + 1); onChange?.(); };
+  const saveLinks = (id: number, l: LinkTag[]) => api<LinkTag[]>(`/api/style-posts/${id}/links`, { method: "PUT", body: JSON.stringify(l.map(({ label, url, x, y }) => ({ label: label.trim(), url: url.trim(), x, y }))) });
   const uploadPhoto = async (id: number, blob: Blob) => {
     const form = new FormData(); form.append("image", blob, "photo.jpg");
     await api<void>(`/api/style-posts/${id}/photo`, { method: "POST", body: form });
@@ -145,10 +149,13 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
     if (post?.category === "OUTFIT") { const m = missing(draft.outfit); if (m) { setNotice({ id, text: `${m.ko} 아이템과 색을 골라 주세요.` }); return; } }
     const finalTitle = draft.title.trim() || (post?.category === "OUTFIT" ? outfitTitle(draft.outfit) : "");
     if (!finalTitle) { setNotice({ id, text: "제목을 입력해 주세요." }); return; }
+    const linkError = linksProblem(draft.links);
+    if (linkError) { setNotice({ id, text: linkError }); return; }
     try {
       let updated = await api<StylePost>(`/api/style-posts/${id}`, { method: "PUT", body: JSON.stringify({ title: finalTitle, comment: draft.comment, colors: [], outfit: post?.category === "OUTFIT" ? draft.outfit : null }) });
       if (draft.photo instanceof Blob) { await uploadPhoto(id, draft.photo); updated = { ...updated, hasPhoto: true }; }
       else if (draft.photo === "remove" && post?.hasPhoto) { await api<void>(`/api/style-posts/${id}/photo`, { method: "DELETE" }); updated = { ...updated, hasPhoto: false }; }
+      updated = { ...updated, links: await saveLinks(id, draft.links) };
       setPosts(list => list.map(p => p.id === id ? updated : p));
       setEditing(null); setNotice(null); changed();
     } catch (err) { setNotice({ id, text: errorText(err, "수정하지 못했습니다.") }); }
@@ -159,6 +166,8 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
     if (category === "OUTFIT") { const m = missing(outfit); if (m) { setFormError(`${m.ko} 아이템과 색을 골라 주세요.`); return; } }
     if (category === "TIP" && !comment.trim()) { setFormError("팁 내용을 적어 주세요."); return; }
     const finalTitle = title.trim() || (category === "OUTFIT" ? outfitTitle(outfit) : `${item.name} 입는 팁`);
+    const linkError = linksProblem(links);
+    if (linkError) { setFormError(linkError); return; }
     setSending(true); setFormError("");
     try {
       const body = { item: item.id, category, title: finalTitle, comment, colors: [], outfit: category === "OUTFIT" ? outfit : null, gender, ageGroup: age };
@@ -167,7 +176,11 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
         try { await uploadPhoto(created.id, photo); created = { ...created, hasPhoto: true }; }
         catch (err) { setFormError(`글은 올라갔지만 사진은 못 올렸어요: ${errorText(err, "다시 시도해 주세요.")}`); }
       }
-      setTitle(""); setComment(""); setOutfit(startOutfit()); setPhoto(null);
+      if (links.length) {
+        try { created = { ...created, links: await saveLinks(created.id, links) }; }
+        catch (err) { setFormError(`글은 올라갔지만 링크는 못 달았어요: ${errorText(err, "수정에서 다시 달아 주세요.")}`); }
+      }
+      setTitle(""); setComment(""); setOutfit(startOutfit()); setPhoto(null); setLinks([]);
       if (filter === "ALL" || filter === created.category) setPosts(list => [created, ...list]);
       changed();
     } catch (err) { setFormError(errorText(err, "글을 올리지 못했습니다. 서버 연결을 확인해 주세요.")); }
@@ -199,20 +212,21 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
               </div>
               {isEditing ? <form className="vote-edit" onSubmit={saveEdit}>
                 {post.category === "OUTFIT" && <OutfitEditor outfit={editing.draft.outfit} onChange={o => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, outfit: o } })}/>}
-                <PhotoPicker value={editing.draft.photo instanceof Blob ? editing.draft.photo : null} current={post.hasPhoto && editing.draft.photo === "keep" ? photoUrl(post.id, photoVersion[post.id]) : undefined} onChange={b => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, photo: b ?? "remove" } })}/>
+                <PhotoPicker value={editing.draft.photo instanceof Blob ? editing.draft.photo : null} current={post.hasPhoto && editing.draft.photo === "keep" ? photoUrl(post.id, photoVersion[post.id]) : undefined} onChange={b => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, photo: b ?? "remove" } })} links={editing.draft.links} onLinksChange={l => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, links: l } })}/>
                 <input className="vote-input" aria-label="제목 수정" maxLength={40} value={editing.draft.title} onChange={e => setEditing({ id: post.id, draft: { ...editing.draft, title: e.target.value } })} placeholder="제목 (비우면 자동)"/>
                 <textarea className="vote-input vote-textarea" aria-label="내용 수정" maxLength={200} value={editing.draft.comment} onChange={e => setEditing({ id: post.id, draft: { ...editing.draft, comment: e.target.value } })}/>
                 <div className="vote-owner-actions"><Button type="submit" size="sm">저장</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setEditing(null); setNotice(null); }}>취소</Button></div>
               </form> : <>
                 <h3>{post.title}</h3>
-                {post.hasPhoto && <a className="vote-photo" href={photoUrl(post.id, photoVersion[post.id])} target="_blank" rel="noreferrer"><img src={photoUrl(post.id, photoVersion[post.id])} alt={`${post.nickname}님의 ${post.title} 사진`} loading="lazy"/></a>}
+                {post.hasPhoto && <TaggedPhoto className="vote-photo" src={photoUrl(post.id, photoVersion[post.id])} alt={`${post.nickname}님의 ${post.title} 사진`} links={post.links}/>}
+                <LinkList links={post.links}/>
                 {post.outfit && <OutfitPieces outfit={post.outfit} highlight={item.id} compact/>}
                 {post.comment && <p>{post.comment}</p>}
                 <span className="vote-track"><span style={{ width: `${share}%` }}/></span>
                 <div className="vote-owner-actions">
                   {post.mine ? (confirmDelete === post.id
                     ? <><span className="vote-confirm">정말 삭제할까요?</span><Button size="sm" variant="ghost" className="danger" onClick={() => remove(post)}>삭제</Button><Button size="sm" variant="ghost" onClick={() => setConfirmDelete(null)}>취소</Button></>
-                    : <><Button size="sm" variant="ghost" onClick={() => { setEditing({ id: post.id, draft: { title: post.title, comment: post.comment, outfit: post.outfit ?? emptyOutfit(), photo: "keep" } }); setConfirmDelete(null); setNotice(null); }}><Pencil size={13}/> 수정</Button><Button size="sm" variant="ghost" onClick={() => { setConfirmDelete(post.id); setEditing(null); }}><Trash2 size={13}/> 삭제</Button></>)
+                    : <><Button size="sm" variant="ghost" onClick={() => { setEditing({ id: post.id, draft: { title: post.title, comment: post.comment, outfit: post.outfit ?? emptyOutfit(), photo: "keep", links: post.links } }); setConfirmDelete(null); setNotice(null); }}><Pencil size={13}/> 수정</Button><Button size="sm" variant="ghost" onClick={() => { setConfirmDelete(post.id); setEditing(null); }}><Trash2 size={13}/> 삭제</Button></>)
                     : <Button size="sm" variant="ghost" disabled={post.reported} onClick={() => report(post)} aria-label={`${post.title} 신고`}><Flag size={13}/> {post.reported ? "신고됨" : "신고"}</Button>}
                 </div>
               </>}
@@ -238,7 +252,7 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
           </div>
           {category === "OUTFIT" && <><label className="vote-label">코디 고르기</label><OutfitEditor outfit={outfit} onChange={setOutfit} lockSlot={slotForItem(item)}/></>}
           <label className="vote-label">사진</label>
-          <PhotoPicker value={photo} onChange={setPhoto}/>
+          <PhotoPicker value={photo} onChange={setPhoto} links={links} onLinksChange={setLinks}/>
           <label className="vote-label" htmlFor="vote-title">제목{category === "OUTFIT" ? " (비우면 자동)" : " (선택)"}</label>
           <input id="vote-title" className="vote-input" maxLength={40} value={title} onChange={e => setTitle(e.target.value)} placeholder={category === "OUTFIT" ? outfitTitle(outfit) || "예) 화이트 셔츠 + 인디고 와이드" : `${item.name} 입는 팁`}/>
           <label className="vote-label" htmlFor="vote-comment">{category === "OUTFIT" ? "한마디" : "팁 내용"}</label>

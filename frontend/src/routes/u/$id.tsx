@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Heart, Images, LayoutGrid, Lightbulb, Shirt, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LinkList, TaggedPhoto, type LinkTag } from "@/components/link-tags";
 import { OutfitPieces } from "@/components/outfit-card";
 import { SiteHeader, SiteFooter } from "@/components/site-header";
 import { TierBadge, tiers } from "@/components/tier-badge";
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/u/$id")({
   component: ProfilePage,
 });
 
-type Post = { id: number; item: string; category: "OUTFIT" | "TIP"; title: string; colors: string[]; comment: string; createdAt: string; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; hasPhoto: boolean };
+type Post = { id: number; item: string; category: "OUTFIT" | "TIP"; title: string; colors: string[]; comment: string; createdAt: string; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; hasPhoto: boolean; links: LinkTag[] };
 type Profile = { userId: number; nickname: string; joinedAt: string; posts: number; votes: number; badge: boolean; tier: number; me: boolean };
 
 /** 다음 등급까지 남은 것 (백엔드 TIER_RULE 과 같은 기준) */
@@ -95,13 +96,14 @@ function ProfilePage() {
     {open && <div className="feed-modal" role="dialog" aria-modal="true" aria-label={open.title} onClick={() => setOpen(null)}>
       <div className="feed-modal-card" onClick={e => e.stopPropagation()}>
         <button type="button" className="feed-close" aria-label="닫기" onClick={() => setOpen(null)}><X size={18}/></button>
-        <div className="feed-modal-media">{open.hasPhoto ? <img src={photoUrl(open.id)} alt={open.title}/> : open.category === "OUTFIT" ? <span className="feed-colors">{open.colors.map((c, i) => <i key={i} style={{ background: c }}/>)}</span> : <span className="feed-tip"><Lightbulb size={24}/></span>}</div>
+        <div className="feed-modal-media">{open.hasPhoto ? <TaggedPhoto src={photoUrl(open.id)} alt={open.title} links={open.links}/> : open.category === "OUTFIT" ? <span className="feed-colors">{open.colors.map((c, i) => <i key={i} style={{ background: c }}/>)}</span> : <span className="feed-tip"><Lightbulb size={24}/></span>}</div>
         <div className="feed-modal-info">
           <span className="eyebrow">{open.category === "OUTFIT" ? "OUTFIT" : "TIP"} · {new Date(open.createdAt).toLocaleDateString("ko-KR")}</span>
           <h2>{open.title}</h2>
           {itemById(open.item) && <Link to="/item/$id" params={{ id: open.item }} className="inline-link">{itemById(open.item)!.name} 가이드 보기</Link>}
           {open.outfit && <OutfitPieces outfit={open.outfit} highlight={open.item}/>}
           {open.comment && <p>{open.comment}</p>}
+          <LinkList links={open.links}/>
           <Button variant="outline" className={open.voted ? "vote-button voted" : "vote-button"} aria-pressed={open.voted} onClick={() => vote(open)}><Heart size={15} fill={open.voted ? "currentColor" : "none"}/><strong>{open.votes}</strong></Button>
           {open.mine && <small className="vote-form-note">내 글에는 추천할 수 있지만 순위에는 들어가지 않아요.</small>}
           {error && <p className="ai-error">{error}</p>}

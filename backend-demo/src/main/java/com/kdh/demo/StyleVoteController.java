@@ -52,6 +52,7 @@ import org.springframework.web.server.ResponseStatusException;
  *   POST   /api/style-posts/{id}/photo    (본인)   multipart image -> 코디 사진 붙이기(바꾸기)
  *   DELETE /api/style-posts/{id}/photo    (본인)
  *   GET    /api/style-posts/{id}/photo    -> image/jpeg (누구나)
+ *   PUT    /api/style-posts/{id}/links    (본인)   [{ label, url, x, y }] -> 구매처 링크 태그를 통째로 바꾼다 (최대 5개, x·y 는 사진 위 위치 %)
  *   GET    /api/style-posts/users/{userId} -> 프로필 + 그 사람이 올린 글 (인스타 피드처럼)
  * 작성자·투표자는 "u:사용자번호" 로 저장하고, 응답에는 mine/me 같은 true/false 로만 알려준다.
  */
@@ -81,7 +82,15 @@ public class StyleVoteController {
     public record StylePost(long id, String item, String category, String title, List<String> colors,
                             String comment, String nickname, String createdAt, boolean edited, Outfit outfit,
                             int votes, boolean voted, boolean mine, boolean reported, boolean authorBadge,
-                            boolean hasPhoto, Long authorUserId, int authorTier) {}
+                            boolean hasPhoto, Long authorUserId, int authorTier, List<LinkTag> links) {
+        StylePost withLinks(List<LinkTag> l) {
+            return new StylePost(id, item, category, title, colors, comment, nickname, createdAt, edited, outfit, votes, voted, mine,
+                    reported, authorBadge, hasPhoto, authorUserId, authorTier, l);
+        }
+    }
+
+    /** 사진 속 아이템 구매처 태그. x·y 는 사진 위 위치(0~100%), 사진 없이 목록으로만 달면 null. */
+    public record LinkTag(String label, String url, String domain, Integer x, Integer y) {}
 
     /** 프로필: 지금 닉네임, 가입일, 올린 글 수, 받은 추천 수(본인 추천 제외), 뱃지 */
     public record Profile(long userId, String nickname, String joinedAt, int posts, int votes, boolean badge, int tier, boolean me) {}
@@ -126,6 +135,8 @@ public class StyleVoteController {
     private static final long MAX_PHOTO_BYTES = 5L * 1024 * 1024;
     private static final Set<String> PHOTO_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
+    private static final int MAX_LINKS = 5;
+
     private static final String HAS_ITEM = "(p.outer_item = ? OR p.top_item = ? OR p.bottom_item = ? OR p.shoe_item = ? OR p.acc_item = ?)";
 
     private final JdbcTemplate jdbc;
@@ -152,7 +163,7 @@ public class StyleVoteController {
             args.add(category);
         }
         String order = "recent".equals(sort) ? "p.id DESC" : "votes DESC, p.id DESC";
-        return jdbc.query("""
+        return withLinks(jdbc.query("""
                 SELECT p.*, COUNT(v.post_id) AS votes,
                        COALESCE(MAX(v.voter_id = ?), 0) AS voted,
                        (p.author_id <> '' AND p.author_id = ?) AS mine,
@@ -162,7 +173,7 @@ public class StyleVoteController {
                 LEFT JOIN style_votes v ON v.post_id = p.id
                 LEFT JOIN (%s) a ON a.author_id = p.author_id
                 """.formatted(BADGE_RULE, TIER_RULE, HAS_PHOTO, AUTHOR_STATS) + where + " GROUP BY p.id ORDER BY " + order + " LIMIT 100",
-                this::mapPost, args.toArray());
+                this::mapPost, args.toArray()));
     }
 
     @PostMapping
@@ -310,6 +321,73 @@ public class StyleVoteController {
                 Math.max(1, Math.min(limit, 30)));
     }
 
+    /** 글 목록에 링크 태그를 한 번의 쿼리로 붙인다 */
+    private List<StylePost> withLinks(List<StylePost> posts) {
+        if (posts.isEmpty()) return posts;
+        String ids = String.join(",", posts.stream().map(p -> String.valueOf(p.id())).toList());
+        Map<Long, List<LinkTag>> byPost = new java.util.HashMap<>();
+        jdbc.query("SELECT post_id, label, url, x, y FROM post_links WHERE post_id IN (" + ids + ") ORDER BY post_id, position",
+                rs -> {
+                    String url = rs.getString("url");
+                    byPost.computeIfAbsent(rs.getLong("post_id"), k -> new ArrayList<>())
+                            .add(new LinkTag(rs.getString("label"), url, domainOf(url), (Integer) rs.getObject("x"), (Integer) rs.getObject("y")));
+                });
+        return posts.stream().map(p -> byPost.containsKey(p.id()) ? p.withLinks(byPost.get(p.id())) : p).toList();
+    }
+
+    private StylePost withLinks(StylePost post) {
+        return withLinks(List.of(post)).get(0);
+    }
+
+    @PutMapping("/{id}/links")
+    public List<LinkTag> setLinks(@PathVariable long id, @RequestBody List<LinkTag> links,
+                                  @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String me = auth.require(authorization).key();
+        ensureSchema();
+        requireOwner(id, me);
+        if (links == null) links = List.of();
+        if (links.size() > MAX_LINKS) throw bad("링크는 " + MAX_LINKS + "개까지 달 수 있어요.");
+        List<LinkTag> clean = new ArrayList<>();
+        for (LinkTag l : links) {
+            String label = trim(l.label(), 40);
+            if (label.isEmpty()) throw bad("링크마다 아이템 이름을 적어 주세요.");
+            if (ProfanityFilter.contains(label)) throw bad("부적절한 표현이 들어 있어요.");
+            String url = cleanUrl(l.url());
+            Integer x = l.x() == null ? null : Math.max(0, Math.min(100, l.x()));
+            Integer y = l.y() == null ? null : Math.max(0, Math.min(100, l.y()));
+            clean.add(new LinkTag(label, url, domainOf(url), x, y));
+        }
+        jdbc.update("DELETE FROM post_links WHERE post_id = ?", id);
+        for (int i = 0; i < clean.size(); i++) {
+            LinkTag l = clean.get(i);
+            jdbc.update("INSERT INTO post_links (post_id, position, label, url, x, y) VALUES (?, ?, ?, ?, ?, ?)", id, i, l.label(), l.url(), l.x(), l.y());
+        }
+        return clean;
+    }
+
+    /** http(s) 주소만 받고, 주소 형식이 맞는지 확인한다 (javascript: 같은 위험한 주소 차단). */
+    private static String cleanUrl(String raw) {
+        String url = raw == null ? "" : raw.strip();
+        if (!url.matches("(?i)^https?://.+")) throw bad("구매 링크는 http:// 또는 https:// 로 시작해야 해요.");
+        if (url.length() > 500) throw bad("링크가 너무 길어요.");
+        try {
+            java.net.URI uri = new java.net.URI(url);
+            if (uri.getHost() == null || !uri.getHost().contains(".")) throw bad("링크 주소가 올바르지 않아요.");
+        } catch (java.net.URISyntaxException e) {
+            throw bad("링크 주소가 올바르지 않아요.");
+        }
+        return url;
+    }
+
+    private static String domainOf(String url) {
+        try {
+            String host = new java.net.URI(url).getHost();
+            return host == null ? "" : host.replaceFirst("^www\\.", "");
+        } catch (java.net.URISyntaxException e) {
+            return "";
+        }
+    }
+
     @PostMapping("/{id}/photo")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void uploadPhoto(@PathVariable long id, @RequestParam("image") MultipartFile image,
@@ -372,11 +450,13 @@ public class StyleVoteController {
         int hours = "day".equals(period) ? 24 : "all".equals(period) ? 24 * 365 * 50 : 24 * 7;
         // 본인이 누른 좋아요는 빼고, 기간 안에 받은 좋아요 순. 같으면 사진 있는 글, 최신 글 먼저.
         String recent = "COALESCE(SUM(v.voter_id <> p.author_id AND v.created_at >= NOW() - INTERVAL " + hours + " HOUR), 0) AS recent_votes,";
-        return jdbc.query(feedSelect(recent)
+        List<Trending> rows = jdbc.query(feedSelect(recent)
                         + " WHERE p.hidden = 0 AND p.category = 'OUTFIT' GROUP BY p.id"
                         + " ORDER BY recent_votes DESC, has_photo DESC, p.id DESC LIMIT ?",
                 (rs, i) -> new Trending(mapPost(rs, i), rs.getInt("recent_votes")),
                 me, me, me, Math.max(1, Math.min(limit, 24)));
+        List<StylePost> linked = withLinks(rows.stream().map(Trending::post).toList());
+        return java.util.stream.IntStream.range(0, rows.size()).mapToObj(i -> new Trending(linked.get(i), rows.get(i).recentVotes())).toList();
     }
 
     @GetMapping("/latest")
@@ -386,8 +466,8 @@ public class StyleVoteController {
         ensureSchema();
         String me = auth.current(authorization).map(AuthService.User::key).orElse("");
         String where = " WHERE p.hidden = 0" + (photo ? " AND EXISTS (SELECT 1 FROM post_photos ph2 WHERE ph2.post_id = p.id)" : "");
-        return jdbc.query(feedSelect("") + where + " GROUP BY p.id ORDER BY p.id DESC LIMIT ?",
-                this::mapPost, me, me, me, Math.max(1, Math.min(limit, 24)));
+        return withLinks(jdbc.query(feedSelect("") + where + " GROUP BY p.id ORDER BY p.id DESC LIMIT ?",
+                this::mapPost, me, me, me, Math.max(1, Math.min(limit, 24))));
     }
 
     @GetMapping("/users/{userId}")
@@ -414,7 +494,7 @@ public class StyleVoteController {
                 WHERE p.author_id = ? AND p.hidden = 0
                 GROUP BY p.id ORDER BY p.id DESC LIMIT 200""".formatted(HAS_PHOTO),
                 this::mapPost, me, me, me, found.get(0).badge() ? 1 : 0, found.get(0).tier(), key);
-        return new ProfilePage(found.get(0), posts);
+        return new ProfilePage(found.get(0), withLinks(posts));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -488,6 +568,18 @@ public class StyleVoteController {
                       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                       FOREIGN KEY (post_id) REFERENCES style_posts(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB""");
+            jdbc.execute("""
+                    CREATE TABLE IF NOT EXISTS post_links (
+                      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                      post_id BIGINT NOT NULL,
+                      position TINYINT NOT NULL,
+                      label VARCHAR(40) NOT NULL,
+                      url VARCHAR(500) NOT NULL,
+                      x TINYINT NULL,
+                      y TINYINT NULL,
+                      INDEX idx_post (post_id),
+                      FOREIGN KEY (post_id) REFERENCES style_posts(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""");
             Integer seeded = jdbc.queryForObject("SELECT COUNT(*) FROM style_posts WHERE category = 'OUTFIT' AND top_item <> ''", Integer.class);
             if (seeded != null && seeded == 0) {
                 // 예전 예시 글(작성자 없음)은 새 구조에 맞는 예시 코디로 바꾼다. 사람들이 쓴 글은 그대로 둔다.
@@ -637,14 +729,14 @@ public class StyleVoteController {
 
     /** 방금 쓰거나 고친 글을 작성자 시점(mine=true)으로 다시 읽는다. */
     private StylePost findForAuthor(long id, String author) {
-        return jdbc.queryForObject("""
+        return withLinks(jdbc.queryForObject("""
                 SELECT p.*, (SELECT COUNT(*) FROM style_votes v WHERE v.post_id = p.id) AS votes,
                        EXISTS (SELECT 1 FROM style_votes v WHERE v.post_id = p.id AND v.voter_id = ?) AS voted,
                        (p.author_id <> '' AND p.author_id = ?) AS mine, 0 AS reported,
                        COALESCE((SELECT %s FROM (%s) a WHERE a.author_id = p.author_id), 0) AS author_badge,
                        COALESCE((SELECT %s FROM (%s) a WHERE a.author_id = p.author_id), 0) AS author_tier, %s
                 FROM style_posts p WHERE p.id = ?""".formatted(BADGE_RULE, AUTHOR_STATS, TIER_RULE, AUTHOR_STATS, HAS_PHOTO),
-                this::mapPost, author, author, id);
+                this::mapPost, author, author, id));
     }
 
     private void requireOwner(long id, String me) {
@@ -722,7 +814,8 @@ public class StyleVoteController {
                 rs.getInt("author_badge") == 1,
                 rs.getInt("has_photo") == 1,
                 userIdOf(rs.getString("author_id")),
-                rs.getInt("author_tier"));
+                rs.getInt("author_tier"),
+                List.of());
     }
 
     /** "u:12" -> 12. 예시 글처럼 작성자가 없으면 null. */
