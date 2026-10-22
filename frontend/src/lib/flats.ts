@@ -29,6 +29,7 @@ type TopOpts = {
   open?: boolean;                                        // 앞이 열린 아우터
   zip?: "full" | "half" | "offset"; buttons?: number; pockets?: "patch" | "flap" | "kanga" | "chest" | "four";
   quilt?: number; belt?: boolean; ribs?: boolean; stripes?: boolean; trim?: string; flare?: number;
+  sleeveStripe?: boolean;                                // 트랙 자켓 소매 옆줄
 };
 
 function topFlat(c: Ink, o: TopOpts) {
@@ -69,6 +70,7 @@ function topFlat(c: Ink, o: TopOpts) {
   if (o.pockets === "flap") for (const s of [-1, 1]) d.push(`M${CX + s * 20} ${bottom - 92} h${s * 44}`);
   if (o.pockets === "chest" || o.pockets === "four") for (const s of [-1, 1]) d.push(`M${CX + s * 22} ${top + 44} h${s * 32} v30 h${-s * 32} Z`);
   if (o.stripes) for (let y = top + 34; y < bottom - 10; y += 44) parts.push(`<rect x="${CX - hw}" y="${y}" width="${hw * 2}" height="16" fill="${c.detail}" opacity=".55"/>`);
+  if (o.sleeveStripe && sl === "long") parts.push(`<path d="M${CX - hw - 6} ${top + 10} L${CX - hw - 50} ${bottom - 42} M${W - (CX - hw - 6)} ${top + 10} L${W - (CX - hw - 50)} ${bottom - 42}" stroke="#F1F0EC" stroke-width="7" fill="none" stroke-linecap="round"/>`);
   if (o.neck === "hood" && o.zip !== "full") d.push(`M${CX - 10} ${top + 6} v30 M${CX + 10} ${top + 6} v30`);
   return parts.join("") + (d.length ? `<path d="${d.join(" ")}" ${det}/>` : "");
 }
@@ -88,7 +90,7 @@ function pantsFlat(c: Ink, o: PantsOpts) {
   if (o.cord) for (const s of [-1, 1]) for (const t of [0.3, 0.55, 0.8]) d.push(line([CX + s * (6 + (hw - 6) * t), crotch - 10], [CX + s * (o.hemIn + (o.hemOut - o.hemIn) * t), hem - 4]));
   if (o.pleat) d.push(line([CX - 30, waist + 20], [CX - 34, waist + 70]), line([CX + 30, waist + 20], [CX + 34, waist + 70]));
   let extra = "";
-  if (o.stripe) extra = `<path d="M${CX - hw - 2} ${waist + 24} L${CX - o.hemOut + 4} ${hem} M${CX + hw + 2} ${waist + 24} L${CX + o.hemOut - 4} ${hem}" stroke="#F1F0EC" stroke-width="7" fill="none"/>`;
+  if (o.stripe) extra = `<path d="M${CX - hw + 10} ${waist + 24} L${CX - o.hemOut + 14} ${hem - 2} M${CX + hw - 10} ${waist + 24} L${CX + o.hemOut - 14} ${hem - 2}" stroke="#F1F0EC" stroke-width="7" fill="none"/>`;
   // 데님: 노란 스티치(앞 지퍼 J선, 앞주머니, 동전 주머니, 밑단)
   if (o.denim) extra += `<path d="M${CX - 4} ${waist + 24} L${CX - 4} ${crotch - 44} Q${CX - 4} ${crotch - 26} ${CX - 22} ${crotch - 34} L${CX - 22} ${waist + 24} M${CX - hw + 4} ${waist + 30} Q${CX - hw + 30} ${waist + 44} ${CX - hw + 40} ${waist + 24} M${CX + hw - 4} ${waist + 30} Q${CX + hw - 30} ${waist + 44} ${CX + hw - 40} ${waist + 24} M${CX + hw - 34} ${waist + 30} h-16 v14 h16 M${CX - o.hemOut + 2} ${hem - 10} L${CX - o.hemIn - 1} ${hem - 10} M${CX + o.hemIn + 1} ${hem - 10} L${CX + o.hemOut - 2} ${hem - 10}" stroke="#D9A441" stroke-width="2" stroke-dasharray="5 4" fill="none"/>`;
   return `<path d="${poly(pts)}" fill="${c.fill}" stroke="${c.edge}" stroke-width="3" stroke-linejoin="round"/>${extra}<path d="${d.join(" ")}" ${det}/>`;
@@ -170,6 +172,7 @@ const specs: Record<string, Spec> = {
   "leather-jacket": T({ neck: "collar", zip: "offset", hw: 82, bottom: 360, belt: false, pockets: "flap", cuffs: true }),
   "denim-jacket": T({ neck: "collar", buttons: 5, pockets: "chest", hw: 82, bottom: 360, hem: true, cuffs: true }),
   ma1: T({ neck: "high", zip: "full", ribs: true, cuffs: true, hw: 90, bottom: 350, pockets: "flap" }),
+  "track-jacket": T({ neck: "high", zip: "full", ribs: true, cuffs: true, hw: 80, bottom: 370, sleeveStripe: true, pockets: "flap" }),
   windbreaker: T({ neck: "hood", zip: "full", cuffs: true, hw: 84, bottom: 380, hem: true }),
   fleece: T({ neck: "high", zip: "full", hw: 84, bottom: 380, pockets: "flap", cuffs: true, hem: true }),
   cardigan: T({ neck: "v", buttons: 5, ribs: true, cuffs: true, hw: 78 }),
