@@ -37,6 +37,12 @@ TEAM07 소상공인 프로젝트 FYOF(AI 가상 피팅)를 이어서 보완하�
 | AI 파이썬 환경 (`.venv`) | `python3 -m venv .venv` → `.venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu` → `.venv/bin/pip install -e .` → `.venv/bin/pip install onnxruntime fastapi "uvicorn[standard]" python-multipart` |
 | AI 모델 가중치 (2.2GB) | `.venv/bin/python scripts/download_weights.py --weights-dir ./weights` |
 
+## 이 PC에서 실행
+
+- **켜기**: `start-local.bat` 더블클릭 → DB(MySQL) → 백엔드(8081) → 프론트(8080) 창이 따로 뜨고 브라우저가 열린다 (처음엔 1~2분)
+- **끄기**: `stop-local.bat` 더블클릭
+- 경로(MySQL, 데이터 폴더, JDK 21)는 `start-local.bat` 맨 위에서 바꾼다
+
 ## 실행 (VM에서 쓰던 명령)
 
 ```bash
