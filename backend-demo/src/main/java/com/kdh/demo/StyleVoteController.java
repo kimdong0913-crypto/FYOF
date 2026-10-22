@@ -47,6 +47,8 @@ import org.springframework.web.server.ResponseStatusException;
  *   GET    /api/style-posts/ranking?period=all|week -> 추천을 많이 받은 사람 순위 (이번 주는 최근 7일 추천만)
  *   GET    /api/style-posts/stats?item=wide&gender=&age= -> 이 아이템이 들어간 코디와 비중
  *   GET    /api/style-posts/popular       -> 전체 인기 코디
+ *   GET    /api/style-posts/trending?period=day|week|all&limit=8 -> 그 기간에 좋아요를 많이 받은 코디 (홈 "지금 뜨는 코디")
+ *   GET    /api/style-posts/latest?photo=true&limit=8            -> 방금 올라온 글 (사진 있는 글만 고를 수 있음)
  *   POST   /api/style-posts/{id}/photo    (본인)   multipart image -> 코디 사진 붙이기(바꾸기)
  *   DELETE /api/style-posts/{id}/photo    (본인)
  *   GET    /api/style-posts/{id}/photo    -> image/jpeg (누구나)
@@ -85,6 +87,9 @@ public class StyleVoteController {
     public record Profile(long userId, String nickname, String joinedAt, int posts, int votes, boolean badge, int tier, boolean me) {}
 
     public record ProfilePage(Profile profile, List<StylePost> posts) {}
+
+    /** 홈 피드용: 글 + 그 기간에 받은 좋아요 수 */
+    public record Trending(StylePost post, int recentVotes) {}
 
     public record NewPost(String item, String category, String title, String comment, List<String> colors,
                           Outfit outfit, String gender, String ageGroup) {}
@@ -342,6 +347,47 @@ public class StyleVoteController {
                 id);
         if (found.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "사진이 없어요.");
         return found.get(0);
+    }
+
+    /** 글 목록 공통 SELECT (투표 수, 내 투표·내 글·신고 여부, 작성자 등급, 사진 여부) */
+    private String feedSelect(String extraColumns) {
+        return """
+                SELECT p.*, COUNT(v.post_id) AS votes, %s
+                       COALESCE(MAX(v.voter_id = ?), 0) AS voted,
+                       (p.author_id <> '' AND p.author_id = ?) AS mine,
+                       EXISTS (SELECT 1 FROM style_reports r WHERE r.post_id = p.id AND r.reporter_id = ?) AS reported,
+                       COALESCE(MAX(%s), 0) AS author_badge, COALESCE(MAX(%s), 0) AS author_tier, %s
+                FROM style_posts p
+                LEFT JOIN style_votes v ON v.post_id = p.id
+                LEFT JOIN (%s) a ON a.author_id = p.author_id
+                """.formatted(extraColumns, BADGE_RULE, TIER_RULE, HAS_PHOTO, AUTHOR_STATS);
+    }
+
+    @GetMapping("/trending")
+    public List<Trending> trending(@RequestParam(defaultValue = "week") String period,
+                                   @RequestParam(defaultValue = "8") int limit,
+                                   @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ensureSchema();
+        String me = auth.current(authorization).map(AuthService.User::key).orElse("");
+        int hours = "day".equals(period) ? 24 : "all".equals(period) ? 24 * 365 * 50 : 24 * 7;
+        // 본인이 누른 좋아요는 빼고, 기간 안에 받은 좋아요 순. 같으면 사진 있는 글, 최신 글 먼저.
+        String recent = "COALESCE(SUM(v.voter_id <> p.author_id AND v.created_at >= NOW() - INTERVAL " + hours + " HOUR), 0) AS recent_votes,";
+        return jdbc.query(feedSelect(recent)
+                        + " WHERE p.hidden = 0 AND p.category = 'OUTFIT' GROUP BY p.id"
+                        + " ORDER BY recent_votes DESC, has_photo DESC, p.id DESC LIMIT ?",
+                (rs, i) -> new Trending(mapPost(rs, i), rs.getInt("recent_votes")),
+                me, me, me, Math.max(1, Math.min(limit, 24)));
+    }
+
+    @GetMapping("/latest")
+    public List<StylePost> latest(@RequestParam(defaultValue = "false") boolean photo,
+                                  @RequestParam(defaultValue = "8") int limit,
+                                  @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ensureSchema();
+        String me = auth.current(authorization).map(AuthService.User::key).orElse("");
+        String where = " WHERE p.hidden = 0" + (photo ? " AND EXISTS (SELECT 1 FROM post_photos ph2 WHERE ph2.post_id = p.id)" : "");
+        return jdbc.query(feedSelect("") + where + " GROUP BY p.id ORDER BY p.id DESC LIMIT ?",
+                this::mapPost, me, me, me, Math.max(1, Math.min(limit, 24)));
     }
 
     @GetMapping("/users/{userId}")

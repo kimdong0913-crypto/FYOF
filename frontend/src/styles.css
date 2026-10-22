@@ -372,3 +372,32 @@ button.header-icon { background: none; border: 0; cursor: pointer; color: inheri
 .feed-modal-info p { font-size: 13px; line-height: 1.7; margin: 0; color: var(--muted-foreground); }
 .feed-close { position: absolute; top: 10px; right: 10px; z-index: 1; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--background); cursor: pointer; }
 @media (max-width: 760px) { .profile-head { grid-template-columns: 72px minmax(0,1fr); gap: 18px; } .profile-avatar { width: 72px; height: 72px; font-size: 28px; } .profile-name h1 { font-size: 24px; } .feed-grid { gap: 3px; } .feed-caption { display: none; } .feed-modal-card { grid-template-columns: 1fr; } }
+/* --- 홈: 지금 뜨는 코디 / 랭킹 / 방금 올라온 코디 --- */
+.home-trending { padding-top: 90px; }
+.home-trending .section-heading { align-items: flex-end; }
+.section-sub { font-size: 13px; color: var(--muted-foreground); margin: 8px 0 0; }
+.live-eyebrow { display: inline-flex; align-items: center; gap: 7px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #E0453A; box-shadow: 0 0 0 0 rgba(224,69,58,.6); animation: live-pulse 1.8s infinite; }
+@keyframes live-pulse { 0% { box-shadow: 0 0 0 0 rgba(224,69,58,.55); } 70% { box-shadow: 0 0 0 8px rgba(224,69,58,0); } 100% { box-shadow: 0 0 0 0 rgba(224,69,58,0); } }
+.feed-card-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 18px; }
+.feed-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.feed-card-media { position: relative; display: block; aspect-ratio: 4/5; overflow: hidden; background: var(--surface-soft); }
+.feed-card-media img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s ease; }
+.feed-card-media:hover img { transform: scale(1.03); }
+.feed-rank { position: absolute; top: 10px; left: 10px; min-width: 30px; height: 30px; padding: 0 8px; display: grid; place-items: center; background: var(--foreground); color: var(--background); font-weight: 900; font-size: 14px; }
+.feed-likes { position: absolute; right: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; background: rgba(255,255,255,.92); color: #C2362C; font-size: 13px; font-weight: 800; }
+.feed-likes small { color: var(--muted-foreground); font-size: 10px; font-weight: 700; }
+.feed-card-meta { display: flex; flex-direction: column; gap: 4px; }
+.feed-card-meta strong { font-size: 14px; overflow-wrap: anywhere; }
+.feed-card-meta > span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+.feed-card-meta > span a:hover { text-decoration: underline; }
+.feed-card-meta small { font-size: 11px; color: var(--muted-foreground); }
+.home-community { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.6fr); gap: 40px; padding-top: 90px; align-items: start; }
+.home-community-latest { border-top: 2px solid var(--foreground); padding-top: 19px; }
+.home-community-latest h3 { font-size: 20px; margin: 9px 0 16px; }
+.latest-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+.latest-grid .feed-card-media { aspect-ratio: 1; }
+.home-join { margin-top: 20px; width: 100%; }
+@media (max-width: 980px) { .feed-card-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .home-community { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .latest-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
