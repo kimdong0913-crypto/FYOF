@@ -74,7 +74,7 @@ function topFlat(c: Ink, o: TopOpts) {
 }
 
 // ---------- 하의 ----------
-type PantsOpts = { hemOut: number; hemIn: number; knee?: number; length?: number; cargo?: boolean; cuff?: boolean; stripe?: boolean; crease?: boolean; cord?: boolean; pleat?: boolean };
+type PantsOpts = { hemOut: number; hemIn: number; knee?: number; length?: number; cargo?: boolean; cuff?: boolean; stripe?: boolean; crease?: boolean; cord?: boolean; pleat?: boolean; denim?: boolean };
 function pantsFlat(c: Ink, o: PantsOpts) {
   const waist = 80, hem = o.length ?? 440, hw = 64, crotch = 200;
   const knee = o.knee ?? (o.hemOut + hw) / 2;
@@ -89,6 +89,8 @@ function pantsFlat(c: Ink, o: PantsOpts) {
   if (o.pleat) d.push(line([CX - 30, waist + 20], [CX - 34, waist + 70]), line([CX + 30, waist + 20], [CX + 34, waist + 70]));
   let extra = "";
   if (o.stripe) extra = `<path d="M${CX - hw - 2} ${waist + 24} L${CX - o.hemOut + 4} ${hem} M${CX + hw + 2} ${waist + 24} L${CX + o.hemOut - 4} ${hem}" stroke="#F1F0EC" stroke-width="7" fill="none"/>`;
+  // 데님: 노란 스티치(앞 지퍼 J선, 앞주머니, 동전 주머니, 밑단)
+  if (o.denim) extra += `<path d="M${CX - 4} ${waist + 24} L${CX - 4} ${crotch - 44} Q${CX - 4} ${crotch - 26} ${CX - 22} ${crotch - 34} L${CX - 22} ${waist + 24} M${CX - hw + 4} ${waist + 30} Q${CX - hw + 30} ${waist + 44} ${CX - hw + 40} ${waist + 24} M${CX + hw - 4} ${waist + 30} Q${CX + hw - 30} ${waist + 44} ${CX + hw - 40} ${waist + 24} M${CX + hw - 34} ${waist + 30} h-16 v14 h16 M${CX - o.hemOut + 2} ${hem - 10} L${CX - o.hemIn - 1} ${hem - 10} M${CX + o.hemIn + 1} ${hem - 10} L${CX + o.hemOut - 2} ${hem - 10}" stroke="#D9A441" stroke-width="2" stroke-dasharray="5 4" fill="none"/>`;
   return `<path d="${poly(pts)}" fill="${c.fill}" stroke="${c.edge}" stroke-width="3" stroke-linejoin="round"/>${extra}<path d="${d.join(" ")}" ${det}/>`;
 }
 
@@ -196,11 +198,11 @@ const specs: Record<string, Spec> = {
   henley: T({ neck: "crew", buttons: 3, hw: 72, bottom: 380 }),
   camisole: T({ sleeve: "none", neck: "v", hw: 62, flare: 6 }),
   // 하의
-  wide: c => pantsFlat(c, { hemOut: 96, hemIn: 6, knee: 84 }),
-  straight: c => pantsFlat(c, { hemOut: 74, hemIn: 14, knee: 72 }),
-  relaxed: c => pantsFlat(c, { hemOut: 86, hemIn: 10, knee: 84 }),
-  bootcut: c => pantsFlat(c, { hemOut: 84, hemIn: 12, knee: 62 }),
-  skinny: c => pantsFlat(c, { hemOut: 52, hemIn: 18, knee: 56 }),
+  wide: c => pantsFlat(c, { hemOut: 96, hemIn: 6, knee: 84, denim: true }),
+  straight: c => pantsFlat(c, { hemOut: 74, hemIn: 14, knee: 72, denim: true }),
+  relaxed: c => pantsFlat(c, { hemOut: 86, hemIn: 10, knee: 84, denim: true }),
+  bootcut: c => pantsFlat(c, { hemOut: 84, hemIn: 12, knee: 62, denim: true }),
+  skinny: c => pantsFlat(c, { hemOut: 52, hemIn: 18, knee: 56, denim: true }),
   slacks: c => pantsFlat(c, { hemOut: 76, hemIn: 12, knee: 72, crease: true, pleat: true }),
   chinos: c => pantsFlat(c, { hemOut: 70, hemIn: 14, knee: 68, cuff: true }),
   cargo: c => pantsFlat(c, { hemOut: 84, hemIn: 10, knee: 82, cargo: true }),

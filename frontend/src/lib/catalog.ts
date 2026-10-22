@@ -39,7 +39,9 @@ export type Item = {
   colors: string[];    // 많이 입는 색 (palette.ts id)
   tips: string[];      // 이렇게 입어요
   aliases: string[];   // 검색어
-  image: string; hasPhoto: boolean; photoType?: "flat-lay" | "model";
+  image: string;       // 목록·가이드에 보이는 도식 그림
+  photo?: string;      // 실제 옷 사진 (AI 피팅에 보내는 이미지). 데님 3종만 있음
+  hasPhoto: boolean; photoType?: "flat-lay" | "model";
 };
 
 // 도식 그림이 없는 아이템에 쓰는 회색 자리표시 이미지
@@ -50,6 +52,7 @@ function placeholder(category: CategoryId, label: string) {
 }
 
 type Def = [id: string, name: string, english: string, season: string, colors: string, tips: string[], aliases?: string];
+// 1차 때 찍은 실제 사진. 화면에는 다른 아이템과 톤을 맞춰 도식 그림을 쓰고, 사진은 AI 피팅에만 쓴다.
 const photos: Record<string, { image: string; photoType: "flat-lay" | "model" }> = {
   wide: { image: denim, photoType: "flat-lay" },
   straight: { image: straight, photoType: "model" },
@@ -63,10 +66,10 @@ function build(category: CategoryId, defs: Def[]): Item[] {
       id, category, name, english, season, tips,
       colors: colors.split(" "),
       aliases: aliases ? aliases.split(" ") : [],
-      // 사진이 있으면 사진, 없으면 대표 색으로 칠한 도식 그림 (flats.ts)
-      image: photo?.image ?? flatImage(id, colorById(colors.split(" ")[0])?.hex ?? "#9A9A9A") ?? placeholder(category, name),
+      // 대표 색으로 칠한 도식 그림 (flats.ts)
+      image: flatImage(id, colorById(colors.split(" ")[0])?.hex ?? "#9A9A9A") ?? placeholder(category, name),
       hasPhoto: Boolean(photo),
-      ...(photo ? { photoType: photo.photoType } : {}),
+      ...(photo ? { photo: photo.image, photoType: photo.photoType } : {}),
     };
   });
 }

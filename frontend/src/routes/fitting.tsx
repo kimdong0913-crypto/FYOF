@@ -40,7 +40,7 @@ function Fitting() {
     if (!file || !tryOn) return;
     setAi({ state: "running" });
     try {
-      const garment = await (await fetch(product.image)).blob();
+      const garment = await (await fetch(product.photo ?? product.image)).blob();
       const form = new FormData();
       form.append("person", file);
       form.append("garment", garment, "garment.jpg");
