@@ -13,8 +13,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ClosetRouteImport } from './routes/closet'
 import { Route as FittingRouteImport } from './routes/fitting'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MeRouteImport } from './routes/me'
 import { Route as ResultsRouteImport } from './routes/results'
 import { Route as ItemIdRouteImport } from './routes/item/$id'
+import { Route as UIdRouteImport } from './routes/u/$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -36,6 +38,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MeRoute = MeRouteImport.update({
+  id: '/me',
+  path: '/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResultsRoute = ResultsRouteImport.update({
   id: '/results',
   path: '/results',
@@ -46,22 +53,31 @@ const ItemIdRoute = ItemIdRouteImport.update({
   path: '/item/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UIdRoute = UIdRouteImport.update({
+  id: '/u/$id',
+  path: '/u/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/closet': typeof ClosetRoute
   '/fitting': typeof FittingRoute
   '/login': typeof LoginRoute
+  '/me': typeof MeRoute
   '/results': typeof ResultsRoute
   '/item/$id': typeof ItemIdRoute
+  '/u/$id': typeof UIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/closet': typeof ClosetRoute
   '/fitting': typeof FittingRoute
   '/login': typeof LoginRoute
+  '/me': typeof MeRoute
   '/results': typeof ResultsRoute
   '/item/$id': typeof ItemIdRoute
+  '/u/$id': typeof UIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -69,22 +85,42 @@ export interface FileRoutesById {
   '/closet': typeof ClosetRoute
   '/fitting': typeof FittingRoute
   '/login': typeof LoginRoute
+  '/me': typeof MeRoute
   '/results': typeof ResultsRoute
   '/item/$id': typeof ItemIdRoute
+  '/u/$id': typeof UIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/closet' | '/fitting' | '/login' | '/results' | '/item/$id'
+  fullPaths:
+    | '/'
+    | '/closet'
+    | '/fitting'
+    | '/login'
+    | '/me'
+    | '/results'
+    | '/item/$id'
+    | '/u/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/closet' | '/fitting' | '/login' | '/results' | '/item/$id'
+  to:
+    | '/'
+    | '/closet'
+    | '/fitting'
+    | '/login'
+    | '/me'
+    | '/results'
+    | '/item/$id'
+    | '/u/$id'
   id:
     | '__root__'
     | '/'
     | '/closet'
     | '/fitting'
     | '/login'
+    | '/me'
     | '/results'
     | '/item/$id'
+    | '/u/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -92,8 +128,10 @@ export interface RootRouteChildren {
   ClosetRoute: typeof ClosetRoute
   FittingRoute: typeof FittingRoute
   LoginRoute: typeof LoginRoute
+  MeRoute: typeof MeRoute
   ResultsRoute: typeof ResultsRoute
   ItemIdRoute: typeof ItemIdRoute
+  UIdRoute: typeof UIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -126,6 +164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/me': {
+      id: '/me'
+      path: '/me'
+      fullPath: '/me'
+      preLoaderRoute: typeof MeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/results': {
       id: '/results'
       path: '/results'
@@ -140,6 +185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ItemIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/u/$id': {
+      id: '/u/$id'
+      path: '/u/$id'
+      fullPath: '/u/$id'
+      preLoaderRoute: typeof UIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -148,8 +200,10 @@ const rootRouteChildren: RootRouteChildren = {
   ClosetRoute: ClosetRoute,
   FittingRoute: FittingRoute,
   LoginRoute: LoginRoute,
+  MeRoute: MeRoute,
   ResultsRoute: ResultsRoute,
   ItemIdRoute: ItemIdRoute,
+  UIdRoute: UIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

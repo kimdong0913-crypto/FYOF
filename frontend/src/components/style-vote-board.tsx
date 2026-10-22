@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight, ChevronDown, Crown, Flag, Heart, Lightbulb, Pencil, Shirt, Trash2 } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Flag, Heart, ImagePlus, Lightbulb, Pencil, Shirt, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OutfitPieces } from "@/components/outfit-card";
-import { api, errorText } from "@/lib/api";
+import { RankingPanel } from "@/components/ranking-panel";
+import { TierBadge } from "@/components/tier-badge";
+import { api, errorText, photoUrl } from "@/lib/api";
+import { shrinkImage } from "@/lib/image";
 import { colorsFirst, itemById, itemsForSlot, slots, type Item } from "@/lib/catalog";
 import { emptyOutfit, outfitTitle, slotForItem, type Outfit } from "@/lib/outfit";
 import { ages, colorById, genders, palette } from "@/lib/palette";
 import { useUser } from "@/lib/session";
 
 type Category = "OUTFIT" | "TIP";
-type StylePost = { id: number; item: string; category: Category; title: string; colors: string[]; comment: string; nickname: string; createdAt: string; edited: boolean; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; reported: boolean; authorBadge: boolean };
-type RankEntry = { rank: number; nickname: string; posts: number; votes: number; badge: boolean; me: boolean };
-type Draft = { title: string; comment: string; outfit: Outfit };
+type StylePost = { id: number; item: string; category: Category; title: string; colors: string[]; comment: string; nickname: string; createdAt: string; edited: boolean; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; reported: boolean; authorBadge: boolean; hasPhoto: boolean; authorUserId: number | null; authorTier: number };
+type Draft = { title: string; comment: string; outfit: Outfit; photo: "keep" | "remove" | Blob };
 
 const filters = [{ id: "ALL", label: "전체" }, { id: "OUTFIT", label: "코디" }, { id: "TIP", label: "팁" }] as const;
 
@@ -22,6 +24,20 @@ function timeAgo(iso: string) {
   if (diff < 60) return `${Math.floor(diff)}분 전`;
   if (diff < 1440) return `${Math.floor(diff / 60)}시간 전`;
   return `${Math.floor(diff / 1440)}일 전`;
+}
+
+// 사진 고르기: 고르면 바로 줄여서(긴 변 1080px) 미리보기를 보여준다.
+function PhotoPicker({ value, current, onChange }: { value: Blob | null; current?: string | undefined; onChange: (b: Blob | null) => void }) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => { if (!value) { setPreview(null); return; } const u = URL.createObjectURL(value); setPreview(u); return () => URL.revokeObjectURL(u); }, [value]);
+  const shown = preview ?? current;
+  return <div className="photo-picker">
+    {shown ? <div className="photo-preview"><img src={shown} alt="첨부한 사진 미리보기"/><button type="button" aria-label="사진 빼기" onClick={() => onChange(null)}><X size={14}/></button></div>
+      : <label className="photo-drop"><ImagePlus size={20}/><span>내가 입은 사진 올리기 (선택)</span><small>얼굴이 나오는 사진은 모두에게 보여요</small>
+          <input type="file" accept="image/*" hidden onChange={async e => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; setError(""); try { onChange(await shrinkImage(f)); } catch (err) { setError(errorText(err, "사진을 읽지 못했어요.")); } }}/></label>}
+    {error && <p className="ai-error">{error}</p>}
+  </div>;
 }
 
 // 코디 칸마다 아이템과 색을 고른다. 색은 고른 아이템이 많이 입는 색이 앞에 온다.
@@ -58,7 +74,9 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
   const startOutfit = useCallback(() => { const o = emptyOutfit(); o[slotForItem(item)] = { item: item.id, color: item.colors[0] ?? "" }; return o; }, [item]);
 
   const [posts, setPosts] = useState<StylePost[]>([]);
-  const [ranking, setRanking] = useState<RankEntry[]>([]);
+  const [rankVersion, setRankVersion] = useState(0);
+  const [photo, setPhoto] = useState<Blob | null>(null);
+  const [photoVersion, setPhotoVersion] = useState<Record<number, number>>({});
   const [filter, setFilter] = useState<(typeof filters)[number]["id"]>("ALL");
   const [sort, setSort] = useState("인기순");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -76,9 +94,6 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
 
   useEffect(() => { setOutfit(startOutfit()); }, [startOutfit]);
 
-  const loadRanking = useCallback(async () => {
-    try { setRanking(await api<RankEntry[]>("/api/style-posts/ranking")); } catch { /* 순위는 없어도 게시판은 보이게 둔다 */ }
-  }, []);
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams({ item: item.id, category: filter, sort: sort === "최신순" ? "recent" : "votes" });
@@ -88,9 +103,13 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
   }, [item.id, filter, sort]);
   // 로그인·로그아웃하면 내 글/내 투표 표시가 바뀌므로 다시 불러온다
   useEffect(() => { void load(); }, [load, user]);
-  useEffect(() => { void loadRanking(); }, [loadRanking, user]);
 
-  const changed = () => { void loadRanking(); onChange?.(); };
+  const changed = () => { setRankVersion(v => v + 1); onChange?.(); };
+  const uploadPhoto = async (id: number, blob: Blob) => {
+    const form = new FormData(); form.append("image", blob, "photo.jpg");
+    await api<void>(`/api/style-posts/${id}/photo`, { method: "POST", body: form });
+    setPhotoVersion(v => ({ ...v, [id]: Date.now() }));
+  };
 
   const vote = async (post: StylePost) => {
     if (!user) { await goLogin(); return; }
@@ -127,7 +146,9 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
     const finalTitle = draft.title.trim() || (post?.category === "OUTFIT" ? outfitTitle(draft.outfit) : "");
     if (!finalTitle) { setNotice({ id, text: "제목을 입력해 주세요." }); return; }
     try {
-      const updated = await api<StylePost>(`/api/style-posts/${id}`, { method: "PUT", body: JSON.stringify({ title: finalTitle, comment: draft.comment, colors: [], outfit: post?.category === "OUTFIT" ? draft.outfit : null }) });
+      let updated = await api<StylePost>(`/api/style-posts/${id}`, { method: "PUT", body: JSON.stringify({ title: finalTitle, comment: draft.comment, colors: [], outfit: post?.category === "OUTFIT" ? draft.outfit : null }) });
+      if (draft.photo instanceof Blob) { await uploadPhoto(id, draft.photo); updated = { ...updated, hasPhoto: true }; }
+      else if (draft.photo === "remove" && post?.hasPhoto) { await api<void>(`/api/style-posts/${id}/photo`, { method: "DELETE" }); updated = { ...updated, hasPhoto: false }; }
       setPosts(list => list.map(p => p.id === id ? updated : p));
       setEditing(null); setNotice(null); changed();
     } catch (err) { setNotice({ id, text: errorText(err, "수정하지 못했습니다.") }); }
@@ -141,8 +162,12 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
     setSending(true); setFormError("");
     try {
       const body = { item: item.id, category, title: finalTitle, comment, colors: [], outfit: category === "OUTFIT" ? outfit : null, gender, ageGroup: age };
-      const created = await api<StylePost>("/api/style-posts", { method: "POST", body: JSON.stringify(body) });
-      setTitle(""); setComment(""); setOutfit(startOutfit());
+      let created = await api<StylePost>("/api/style-posts", { method: "POST", body: JSON.stringify(body) });
+      if (photo) {
+        try { await uploadPhoto(created.id, photo); created = { ...created, hasPhoto: true }; }
+        catch (err) { setFormError(`글은 올라갔지만 사진은 못 올렸어요: ${errorText(err, "다시 시도해 주세요.")}`); }
+      }
+      setTitle(""); setComment(""); setOutfit(startOutfit()); setPhoto(null);
       if (filter === "ALL" || filter === created.category) setPosts(list => [created, ...list]);
       changed();
     } catch (err) { setFormError(errorText(err, "글을 올리지 못했습니다. 서버 연결을 확인해 주세요.")); }
@@ -170,22 +195,24 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
             <div className="vote-body">
               <div className="vote-meta">
                 <span>{post.category === "OUTFIT" ? <><Shirt size={11}/> OUTFIT</> : <><Lightbulb size={11}/> TIP</>}</span>
-                <span className="vote-author">{post.authorBadge && <span className="fashionista-badge" title="패셔니스타"><Crown size={11}/> FASHIONISTA</span>}{post.nickname}{post.mine && <em>· 내 글</em>} · {timeAgo(post.createdAt)}{post.edited && " · 수정됨"}</span>
+                <span className="vote-author">{post.authorUserId ? <Link to="/u/$id" params={{ id: String(post.authorUserId) }} className="vote-author-link">{post.nickname}</Link> : post.nickname}<TierBadge tier={post.authorTier}/>{post.mine && <em>· 내 글</em>} · {timeAgo(post.createdAt)}{post.edited && " · 수정됨"}</span>
               </div>
               {isEditing ? <form className="vote-edit" onSubmit={saveEdit}>
                 {post.category === "OUTFIT" && <OutfitEditor outfit={editing.draft.outfit} onChange={o => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, outfit: o } })}/>}
+                <PhotoPicker value={editing.draft.photo instanceof Blob ? editing.draft.photo : null} current={post.hasPhoto && editing.draft.photo === "keep" ? photoUrl(post.id, photoVersion[post.id]) : undefined} onChange={b => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, photo: b ?? "remove" } })}/>
                 <input className="vote-input" aria-label="제목 수정" maxLength={40} value={editing.draft.title} onChange={e => setEditing({ id: post.id, draft: { ...editing.draft, title: e.target.value } })} placeholder="제목 (비우면 자동)"/>
                 <textarea className="vote-input vote-textarea" aria-label="내용 수정" maxLength={200} value={editing.draft.comment} onChange={e => setEditing({ id: post.id, draft: { ...editing.draft, comment: e.target.value } })}/>
                 <div className="vote-owner-actions"><Button type="submit" size="sm">저장</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setEditing(null); setNotice(null); }}>취소</Button></div>
               </form> : <>
                 <h3>{post.title}</h3>
+                {post.hasPhoto && <a className="vote-photo" href={photoUrl(post.id, photoVersion[post.id])} target="_blank" rel="noreferrer"><img src={photoUrl(post.id, photoVersion[post.id])} alt={`${post.nickname}님의 ${post.title} 사진`} loading="lazy"/></a>}
                 {post.outfit && <OutfitPieces outfit={post.outfit} highlight={item.id} compact/>}
                 {post.comment && <p>{post.comment}</p>}
                 <span className="vote-track"><span style={{ width: `${share}%` }}/></span>
                 <div className="vote-owner-actions">
                   {post.mine ? (confirmDelete === post.id
                     ? <><span className="vote-confirm">정말 삭제할까요?</span><Button size="sm" variant="ghost" className="danger" onClick={() => remove(post)}>삭제</Button><Button size="sm" variant="ghost" onClick={() => setConfirmDelete(null)}>취소</Button></>
-                    : <><Button size="sm" variant="ghost" onClick={() => { setEditing({ id: post.id, draft: { title: post.title, comment: post.comment, outfit: post.outfit ?? emptyOutfit() } }); setConfirmDelete(null); setNotice(null); }}><Pencil size={13}/> 수정</Button><Button size="sm" variant="ghost" onClick={() => { setConfirmDelete(post.id); setEditing(null); }}><Trash2 size={13}/> 삭제</Button></>)
+                    : <><Button size="sm" variant="ghost" onClick={() => { setEditing({ id: post.id, draft: { title: post.title, comment: post.comment, outfit: post.outfit ?? emptyOutfit(), photo: "keep" } }); setConfirmDelete(null); setNotice(null); }}><Pencil size={13}/> 수정</Button><Button size="sm" variant="ghost" onClick={() => { setConfirmDelete(post.id); setEditing(null); }}><Trash2 size={13}/> 삭제</Button></>)
                     : <Button size="sm" variant="ghost" disabled={post.reported} onClick={() => report(post)} aria-label={`${post.title} 신고`}><Flag size={13}/> {post.reported ? "신고됨" : "신고"}</Button>}
                 </div>
               </>}
@@ -210,6 +237,8 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
             <Button type="button" variant="outline" className={category === "TIP" ? "selected" : ""} onClick={() => setCategory("TIP")}>입는 팁</Button>
           </div>
           {category === "OUTFIT" && <><label className="vote-label">코디 고르기</label><OutfitEditor outfit={outfit} onChange={setOutfit} lockSlot={slotForItem(item)}/></>}
+          <label className="vote-label">사진</label>
+          <PhotoPicker value={photo} onChange={setPhoto}/>
           <label className="vote-label" htmlFor="vote-title">제목{category === "OUTFIT" ? " (비우면 자동)" : " (선택)"}</label>
           <input id="vote-title" className="vote-input" maxLength={40} value={title} onChange={e => setTitle(e.target.value)} placeholder={category === "OUTFIT" ? outfitTitle(outfit) || "예) 화이트 셔츠 + 인디고 와이드" : `${item.name} 입는 팁`}/>
           <label className="vote-label" htmlFor="vote-comment">{category === "OUTFIT" ? "한마디" : "팁 내용"}</label>
@@ -219,17 +248,11 @@ export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () =
             <div className="select-wrap"><select aria-label="성별" value={gender} onChange={e => setGender(e.target.value)}>{genders.map(g => <option key={g.id} value={g.id}>{g.id ? g.ko : "성별"}</option>)}</select><ChevronDown size={14}/></div>
             <div className="select-wrap"><select aria-label="연령대" value={age} onChange={e => setAge(e.target.value)}>{ages.map(a => <option key={a.id} value={a.id}>{a.id ? a.ko : "연령대"}</option>)}</select><ChevronDown size={14}/></div>
           </div>
-          <p className="vote-form-note vote-as">{user.nickname} 이름으로 올라가요.</p>
+          <p className="vote-form-note vote-as">{user.nickname} 이름으로 올라가고, <Link to="/me" className="inline-link">내 페이지</Link>에도 모여요.</p>
           {formError && <p className="ai-error">{formError}</p>}
           <Button type="submit" className="vote-submit" disabled={sending}>{sending ? "올리는 중…" : "올리기"} <ArrowUpRight size={16}/></Button>
         </form>}
-        <div className="vote-ranking">
-          <span className="fit-control-heading">FASHIONISTA RANKING</span>
-          <h3>추천 많이 받은 사람</h3>
-          {ranking.length === 0 ? <p className="vote-form-note">아직 순위가 없어요. 코디를 올리고 추천을 받아 보세요.</p>
-            : <ol>{ranking.map(r => <li key={r.rank} className={r.me ? "me" : ""}><span className="rank-no">{r.rank}</span><span className="rank-name">{r.badge && <Crown size={13} aria-label="패셔니스타"/>}{r.nickname}{r.me && <em> (나)</em>}</span><span className="rank-score"><Heart size={11} fill="currentColor"/> {r.votes} · 글 {r.posts}</span></li>)}</ol>}
-          <p className="vote-badge-rule"><Crown size={12}/> 추천 10개 이상, 또는 글 5개 이상 + 추천 3개 이상이면 패셔니스타 뱃지를 받아요. 내 글에 누른 추천은 세지 않아요.</p>
-        </div>
+        <RankingPanel version={rankVersion}/>
       </div>
     </div>
   </section>;

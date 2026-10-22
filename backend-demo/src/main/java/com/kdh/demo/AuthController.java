@@ -32,7 +32,7 @@ public class AuthController {
 
     public record LoginRequest(String username, String password) {}
 
-    public record UserView(String username, String nickname) {}
+    public record UserView(long id, String username, String nickname) {}
 
     public record Session(String token, UserView user) {}
 
@@ -81,7 +81,7 @@ public class AuthController {
     }
 
     private static UserView view(AuthService.User user) {
-        return new UserView(user.username(), user.nickname());
+        return new UserView(user.id(), user.username(), user.nickname());
     }
 
     private static ResponseStatusException bad(String message) {

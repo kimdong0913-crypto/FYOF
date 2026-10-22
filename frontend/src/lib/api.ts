@@ -26,6 +26,9 @@ export async function apiImage(path: string): Promise<string> {
   return URL.createObjectURL(await res.blob());
 }
 
+/** 글 사진 주소. 사진을 바꾼 뒤 브라우저 캐시를 피하려고 v 를 붙인다. */
+export const photoUrl = (id: number, v = 0) => `${API_URL}/api/style-posts/${id}/photo${v ? `?v=${v}` : ""}`;
+
 /** 화면에 보여줄 에러 문장. 서버가 보낸 이유가 있으면 그걸, 없으면 fallback. */
 export const errorText = (e: unknown, fallback: string) =>
   e instanceof Error && !e.message.startsWith("API ") && e.message !== "Failed to fetch" ? e.message : fallback;

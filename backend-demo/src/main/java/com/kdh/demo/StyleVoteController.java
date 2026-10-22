@@ -13,7 +13,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -41,9 +44,13 @@ import org.springframework.web.server.ResponseStatusException;
  *   DELETE /api/style-posts/{id}          (본인)
  *   POST   /api/style-posts/{id}/vote     (로그인) -> 투표 토글 { votes, voted }
  *   POST   /api/style-posts/{id}/report   (로그인) -> 신고 { reported, hidden }
- *   GET    /api/style-posts/ranking       -> 추천을 많이 받은 사람 순위
+ *   GET    /api/style-posts/ranking?period=all|week -> 추천을 많이 받은 사람 순위 (이번 주는 최근 7일 추천만)
  *   GET    /api/style-posts/stats?item=wide&gender=&age= -> 이 아이템이 들어간 코디와 비중
  *   GET    /api/style-posts/popular       -> 전체 인기 코디
+ *   POST   /api/style-posts/{id}/photo    (본인)   multipart image -> 코디 사진 붙이기(바꾸기)
+ *   DELETE /api/style-posts/{id}/photo    (본인)
+ *   GET    /api/style-posts/{id}/photo    -> image/jpeg (누구나)
+ *   GET    /api/style-posts/users/{userId} -> 프로필 + 그 사람이 올린 글 (인스타 피드처럼)
  * 작성자·투표자는 "u:사용자번호" 로 저장하고, 응답에는 mine/me 같은 true/false 로만 알려준다.
  */
 @RestController
@@ -71,14 +78,20 @@ public class StyleVoteController {
 
     public record StylePost(long id, String item, String category, String title, List<String> colors,
                             String comment, String nickname, String createdAt, boolean edited, Outfit outfit,
-                            int votes, boolean voted, boolean mine, boolean reported, boolean authorBadge) {}
+                            int votes, boolean voted, boolean mine, boolean reported, boolean authorBadge,
+                            boolean hasPhoto, Long authorUserId, int authorTier) {}
+
+    /** 프로필: 지금 닉네임, 가입일, 올린 글 수, 받은 추천 수(본인 추천 제외), 뱃지 */
+    public record Profile(long userId, String nickname, String joinedAt, int posts, int votes, boolean badge, int tier, boolean me) {}
+
+    public record ProfilePage(Profile profile, List<StylePost> posts) {}
 
     public record NewPost(String item, String category, String title, String comment, List<String> colors,
                           Outfit outfit, String gender, String ageGroup) {}
 
     public record EditPost(String title, String comment, List<String> colors, Outfit outfit) {}
 
-    public record RankEntry(int rank, String nickname, int posts, int votes, boolean badge, boolean me) {}
+    public record RankEntry(int rank, Long userId, String nickname, int posts, int votes, boolean badge, int tier, boolean me) {}
 
     /** 집계용: 코디 하나와 비중(글 1개 = 1, 받은 추천 1개 = 1). */
     public record WeightedOutfit(long id, String title, Outfit outfit, int weight) {}
@@ -97,7 +110,17 @@ public class StyleVoteController {
     private static final String BADGE_RULE = "(a.received >= " + BADGE_VOTES
             + " OR (a.posts >= " + BADGE_ACTIVE_POSTS + " AND a.received >= " + BADGE_ACTIVE_VOTES + "))";
 
+    /** 등급: 3 패셔니스타 / 2 스타일러(글 3개 또는 추천 3개) / 1 루키(글 1개 이상) / 0 없음 */
+    static final int STYLER_POSTS = 3, STYLER_VOTES = 3;
+    private static final String TIER_RULE = "(CASE WHEN " + BADGE_RULE + " THEN 3"
+            + " WHEN a.posts >= " + STYLER_POSTS + " OR a.received >= " + STYLER_VOTES + " THEN 2"
+            + " WHEN a.posts >= 1 THEN 1 ELSE 0 END)";
+
     /** 이 아이템이 어느 칸에든 들어간 글 */
+    private static final String HAS_PHOTO = "EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id) AS has_photo";
+    private static final long MAX_PHOTO_BYTES = 5L * 1024 * 1024;
+    private static final Set<String> PHOTO_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+
     private static final String HAS_ITEM = "(p.outer_item = ? OR p.top_item = ? OR p.bottom_item = ? OR p.shoe_item = ? OR p.acc_item = ?)";
 
     private final JdbcTemplate jdbc;
@@ -129,11 +152,11 @@ public class StyleVoteController {
                        COALESCE(MAX(v.voter_id = ?), 0) AS voted,
                        (p.author_id <> '' AND p.author_id = ?) AS mine,
                        EXISTS (SELECT 1 FROM style_reports r WHERE r.post_id = p.id AND r.reporter_id = ?) AS reported,
-                       COALESCE(MAX(%s), 0) AS author_badge
+                       COALESCE(MAX(%s), 0) AS author_badge, COALESCE(MAX(%s), 0) AS author_tier, %s
                 FROM style_posts p
                 LEFT JOIN style_votes v ON v.post_id = p.id
                 LEFT JOIN (%s) a ON a.author_id = p.author_id
-                """.formatted(BADGE_RULE, AUTHOR_STATS) + where + " GROUP BY p.id ORDER BY " + order + " LIMIT 100",
+                """.formatted(BADGE_RULE, TIER_RULE, HAS_PHOTO, AUTHOR_STATS) + where + " GROUP BY p.id ORDER BY " + order + " LIMIT 100",
                 this::mapPost, args.toArray());
     }
 
@@ -233,19 +256,25 @@ public class StyleVoteController {
     }
 
     @GetMapping("/ranking")
-    public List<RankEntry> ranking(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public List<RankEntry> ranking(@RequestParam(defaultValue = "all") String period,
+                                   @RequestHeader(value = "Authorization", required = false) String authorization) {
         ensureSchema();
         String me = auth.current(authorization).map(AuthService.User::key).orElse("");
+        // 이번 주: 최근 7일 동안 받은 추천으로 줄 세운다 (등급은 전체 기록 기준)
+        String scoreTable = "week".equals(period) ? """
+                SELECT p3.author_id, COUNT(*) AS score FROM style_votes v3 JOIN style_posts p3 ON p3.id = v3.post_id
+                WHERE p3.hidden = 0 AND p3.author_id <> '' AND v3.voter_id <> p3.author_id AND v3.created_at >= NOW() - INTERVAL 7 DAY
+                GROUP BY p3.author_id""" : "SELECT author_id, received AS score FROM (" + AUTHOR_STATS + ") t";
         return jdbc.query("""
-                SELECT a.posts, a.received, %s AS badge, (a.author_id = ?) AS me,
+                SELECT a.author_id, a.posts, sc.score, %s AS badge, %s AS tier, (a.author_id = ?) AS me,
                        (SELECT x.nickname FROM style_posts x WHERE x.author_id = a.author_id AND x.hidden = 0
                         ORDER BY x.id DESC LIMIT 1) AS nickname
-                FROM (%s) a
-                WHERE a.received > 0
-                ORDER BY a.received DESC, a.posts DESC
-                LIMIT 10""".formatted(BADGE_RULE, AUTHOR_STATS),
-                (rs, i) -> new RankEntry(i + 1, rs.getString("nickname"), rs.getInt("posts"), rs.getInt("received"),
-                        rs.getInt("badge") == 1, rs.getInt("me") == 1),
+                FROM (%s) a JOIN (%s) sc ON sc.author_id = a.author_id
+                WHERE sc.score > 0
+                ORDER BY sc.score DESC, a.posts DESC
+                LIMIT 10""".formatted(BADGE_RULE, TIER_RULE, AUTHOR_STATS, scoreTable),
+                (rs, i) -> new RankEntry(i + 1, userIdOf(rs.getString("author_id")), rs.getString("nickname"), rs.getInt("posts"),
+                        rs.getInt("score"), rs.getInt("badge") == 1, rs.getInt("tier"), rs.getInt("me") == 1),
                 me);
     }
 
@@ -274,6 +303,72 @@ public class StyleVoteController {
                 WHERE p.hidden = 0 AND p.category = 'OUTFIT' GROUP BY p.id ORDER BY weight DESC, p.id DESC LIMIT ?""",
                 (rs, i) -> new WeightedOutfit(rs.getLong("id"), rs.getString("title"), outfitOf(rs), rs.getInt("weight")),
                 Math.max(1, Math.min(limit, 30)));
+    }
+
+    @PostMapping("/{id}/photo")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void uploadPhoto(@PathVariable long id, @RequestParam("image") MultipartFile image,
+                            @RequestHeader(value = "Authorization", required = false) String authorization) throws java.io.IOException {
+        String me = auth.require(authorization).key();
+        ensureSchema();
+        requireOwner(id, me);
+        if (image.isEmpty()) throw bad("사진이 비어 있어요.");
+        if (image.getSize() > MAX_PHOTO_BYTES) throw bad("사진은 5MB 이하로 올려 주세요.");
+        String type = image.getContentType() == null ? "" : image.getContentType();
+        if (!PHOTO_TYPES.contains(type)) throw bad("JPG·PNG·WEBP 사진만 올릴 수 있어요.");
+        byte[] bytes = image.getBytes();
+        jdbc.update("REPLACE INTO post_photos (post_id, content_type, image) VALUES (?, ?, ?)", id, type, bytes);
+    }
+
+    @DeleteMapping("/{id}/photo")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deletePhoto(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String me = auth.require(authorization).key();
+        ensureSchema();
+        requireOwner(id, me);
+        jdbc.update("DELETE FROM post_photos WHERE post_id = ?", id);
+    }
+
+    @GetMapping("/{id}/photo")
+    public ResponseEntity<byte[]> photo(@PathVariable long id) {
+        ensureSchema();
+        List<ResponseEntity<byte[]>> found = jdbc.query("""
+                SELECT ph.content_type, ph.image FROM post_photos ph JOIN style_posts p ON p.id = ph.post_id
+                WHERE ph.post_id = ? AND p.hidden = 0""",
+                (rs, i) -> ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType(rs.getString("content_type")))
+                        .cacheControl(CacheControl.maxAge(java.time.Duration.ofMinutes(10)))
+                        .body(rs.getBytes("image")),
+                id);
+        if (found.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "사진이 없어요.");
+        return found.get(0);
+    }
+
+    @GetMapping("/users/{userId}")
+    public ProfilePage profile(@PathVariable long userId, @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ensureSchema();
+        String me = auth.current(authorization).map(AuthService.User::key).orElse("");
+        String key = "u:" + userId;
+        List<Profile> found = jdbc.query("""
+                SELECT u.id, u.nickname, u.created_at,
+                       COALESCE(a.posts, 0) AS posts, COALESCE(a.received, 0) AS received, COALESCE(%s, 0) AS badge, COALESCE(%s, 0) AS tier
+                FROM users u LEFT JOIN (%s) a ON a.author_id = CONCAT('u:', u.id)
+                WHERE u.id = ?""".formatted(BADGE_RULE, TIER_RULE, AUTHOR_STATS),
+                (rs, i) -> new Profile(rs.getLong("id"), rs.getString("nickname"), rs.getString("created_at").replace(' ', 'T') + "Z",
+                        rs.getInt("posts"), rs.getInt("received"), rs.getInt("badge") == 1, rs.getInt("tier"), key.equals(me)),
+                userId);
+        if (found.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없어요.");
+        List<StylePost> posts = jdbc.query("""
+                SELECT p.*, COUNT(v.post_id) AS votes,
+                       COALESCE(MAX(v.voter_id = ?), 0) AS voted,
+                       (p.author_id = ?) AS mine,
+                       EXISTS (SELECT 1 FROM style_reports r WHERE r.post_id = p.id AND r.reporter_id = ?) AS reported,
+                       ? AS author_badge, ? AS author_tier, %s
+                FROM style_posts p LEFT JOIN style_votes v ON v.post_id = p.id
+                WHERE p.author_id = ? AND p.hidden = 0
+                GROUP BY p.id ORDER BY p.id DESC LIMIT 200""".formatted(HAS_PHOTO),
+                this::mapPost, me, me, me, found.get(0).badge() ? 1 : 0, found.get(0).tier(), key);
+        return new ProfilePage(found.get(0), posts);
     }
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -339,6 +434,14 @@ public class StyleVoteController {
                       PRIMARY KEY (post_id, reporter_id),
                       FOREIGN KEY (post_id) REFERENCES style_posts(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""");
+            jdbc.execute("""
+                    CREATE TABLE IF NOT EXISTS post_photos (
+                      post_id BIGINT PRIMARY KEY,
+                      content_type VARCHAR(20) NOT NULL,
+                      image MEDIUMBLOB NOT NULL,
+                      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      FOREIGN KEY (post_id) REFERENCES style_posts(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB""");
             Integer seeded = jdbc.queryForObject("SELECT COUNT(*) FROM style_posts WHERE category = 'OUTFIT' AND top_item <> ''", Integer.class);
             if (seeded != null && seeded == 0) {
                 // 예전 예시 글(작성자 없음)은 새 구조에 맞는 예시 코디로 바꾼다. 사람들이 쓴 글은 그대로 둔다.
@@ -492,8 +595,9 @@ public class StyleVoteController {
                 SELECT p.*, (SELECT COUNT(*) FROM style_votes v WHERE v.post_id = p.id) AS votes,
                        EXISTS (SELECT 1 FROM style_votes v WHERE v.post_id = p.id AND v.voter_id = ?) AS voted,
                        (p.author_id <> '' AND p.author_id = ?) AS mine, 0 AS reported,
-                       COALESCE((SELECT %s FROM (%s) a WHERE a.author_id = p.author_id), 0) AS author_badge
-                FROM style_posts p WHERE p.id = ?""".formatted(BADGE_RULE, AUTHOR_STATS),
+                       COALESCE((SELECT %s FROM (%s) a WHERE a.author_id = p.author_id), 0) AS author_badge,
+                       COALESCE((SELECT %s FROM (%s) a WHERE a.author_id = p.author_id), 0) AS author_tier, %s
+                FROM style_posts p WHERE p.id = ?""".formatted(BADGE_RULE, AUTHOR_STATS, TIER_RULE, AUTHOR_STATS, HAS_PHOTO),
                 this::mapPost, author, author, id);
     }
 
@@ -569,7 +673,16 @@ public class StyleVoteController {
                 rs.getInt("voted") == 1,
                 rs.getInt("mine") == 1,
                 rs.getInt("reported") == 1,
-                rs.getInt("author_badge") == 1);
+                rs.getInt("author_badge") == 1,
+                rs.getInt("has_photo") == 1,
+                userIdOf(rs.getString("author_id")),
+                rs.getInt("author_tier"));
+    }
+
+    /** "u:12" -> 12. 예시 글처럼 작성자가 없으면 null. */
+    private static Long userIdOf(String authorId) {
+        if (authorId == null || !authorId.startsWith("u:")) return null;
+        try { return Long.parseLong(authorId.substring(2)); } catch (NumberFormatException e) { return null; }
     }
 
     /** Set.of(...).contains(null) 은 예외를 던지므로, 빠진 값(null)은 "목록에 없음"으로 본다. */

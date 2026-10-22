@@ -43,7 +43,7 @@ function topFlat(c: Ink, o: TopOpts) {
   const fill = `fill="${c.fill}" stroke="${c.edge}" stroke-width="3" stroke-linejoin="round"`;
   if (o.neck === "hood") parts.push(`<path d="M${CX - 46} ${top - 2} Q${CX - 58} ${top - 78} ${CX} ${top - 84} Q${CX + 58} ${top - 78} ${CX + 46} ${top - 2} Z" ${fill}/>`);
   if (sleeveL.length) { parts.push(`<path d="${poly(sleeveL)}" ${fill}/>`, `<path d="${poly(mirror(sleeveL))}" ${fill}/>`); }
-  if (sl === "none") body.splice(1, 1, [CX - neckW - 16, top - 6], [CX - hw + 6, top + 30], [CX - hw, top + 70]), body.splice(6, 1, [CX + hw, top + 70], [CX + hw - 6, top + 30], [CX + neckW + 16, top - 6]);
+  if (sl === "none") { body.splice(1, 1, [CX - neckW - 16, top - 6], [CX - hw + 6, top + 30], [CX - hw, top + 70]); body.splice(6, 1, [CX + hw, top + 70], [CX + hw - 6, top + 30], [CX + neckW + 16, top - 6]); }
   parts.push(`<path d="${poly(body)}" ${fill}/>`);
   const d: string[] = [];
   const det = `stroke="${c.detail}" stroke-width="2.5" fill="none" stroke-linecap="round"`;
@@ -110,7 +110,8 @@ function shoeFlat(c: Ink, kind: ShoeKind) {
   const baseY = 330, toe = 330, heel = 70;
   const shaft = kind === "high" ? 150 : kind === "chelsea" ? 150 : kind === "worker" ? 160 : kind === "ugg" ? 170 : 0;
   const det = `stroke="${c.detail}" stroke-width="2.5" fill="none" stroke-linecap="round"`;
-  let upper: string, d: string[] = [];
+  let upper: string;
+  const d: string[] = [];
   if (kind === "sandal" || kind === "slide") {
     upper = kind === "slide" ? `M140 ${baseY - 6} Q200 ${baseY - 70} 300 ${baseY - 16} L300 ${baseY - 6} Z` : `M120 ${baseY - 6} Q150 ${baseY - 60} 190 ${baseY - 50} L190 ${baseY - 6} Z M220 ${baseY - 6} Q260 ${baseY - 66} 310 ${baseY - 12} L310 ${baseY - 6} Z`;
   } else {
