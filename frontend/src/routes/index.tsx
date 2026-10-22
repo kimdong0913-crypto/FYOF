@@ -114,6 +114,6 @@ function Index() {
     <section className="home-categories wrap"><div className="section-heading"><div><span className="eyebrow">BROWSE / {items.length} ITEMS</span><h2>카테고리별로 찾아보기<span className="heading-period">.</span></h2></div></div>
       <div className="home-category-grid">{categories.map(c => <Link key={c.id} to="/results" search={{ q: c.ko }} className="home-category"><span>{c.en}</span><strong>{c.ko}</strong><small>{items.filter(i => i.category === c.id).length} ITEMS</small><ArrowUpRight size={18}/></Link>)}</div>
     </section>
-    <section className="home-bottom wrap"><span>TRY BEFORE YOU WEAR.</span><Link to="/fitting" search={{ item: "wide" }}>가상으로 먼저 입어보기 <ArrowDownRight size={24}/></Link></section>
+    <section className="home-bottom wrap"><span>TRY BEFORE YOU WEAR.</span><Link to="/fitting" search={{ item: "denim", fit: "wide" }}>가상으로 먼저 입어보기 <ArrowDownRight size={24}/></Link></section>
   </main><SiteFooter/></>;
 }

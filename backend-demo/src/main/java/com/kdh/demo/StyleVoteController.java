@@ -71,11 +71,13 @@ public class StyleVoteController {
     static final int BADGE_ACTIVE_POSTS = 5;
     static final int BADGE_ACTIVE_VOTES = 3;
 
-    /** 코디 한 칸: 아이템 id + 색 id. 비어 있으면 둘 다 "". */
-    public record Piece(String item, String color) {
-        static final Piece NONE = new Piece("", "");
+    /** 코디 한 칸: 아이템 id + 색 id + 핏 id(핏이 없는 아이템·칸은 ""). 비어 있으면 모두 "". */
+    public record Piece(String item, String color, String fit) {
+        static final Piece NONE = new Piece("", "", "");
         boolean empty() { return item.isEmpty(); }
     }
+
+    private static final Pattern FIT_ID = Pattern.compile("^[a-z-]{0,20}$");
 
     public record Outfit(Piece outer, Piece top, Piece bottom, Piece shoes, Piece acc) {}
 
@@ -215,11 +217,12 @@ public class StyleVoteController {
         jdbc.update("""
                 UPDATE style_posts SET title = ?, colors = ?, comment = ?,
                        outer_item = ?, outer_color = ?, top_item = ?, top_color = ?, bottom_item = ?, bottom_color = ?,
-                       shoe_item = ?, shoe_color = ?, acc_item = ?, acc_color = ?, updated_at = UTC_TIMESTAMP()
+                       shoe_item = ?, shoe_color = ?, acc_item = ?, acc_color = ?, outer_fit = ?, top_fit = ?, bottom_fit = ?,
+                       updated_at = UTC_TIMESTAMP()
                 WHERE id = ?""",
                 title, String.join(",", colors), comment,
                 o.outer().item(), o.outer().color(), o.top().item(), o.top().color(), o.bottom().item(), o.bottom().color(),
-                o.shoes().item(), o.shoes().color(), o.acc().item(), o.acc().color(), id);
+                o.shoes().item(), o.shoes().color(), o.acc().item(), o.acc().color(), o.outer().fit(), o.top().fit(), o.bottom().fit(), id);
         return findForAuthor(id, me);
     }
 
@@ -536,6 +539,9 @@ public class StyleVoteController {
                       shoe_color VARCHAR(20) NOT NULL DEFAULT '',
                       acc_item VARCHAR(40) NOT NULL DEFAULT '',
                       acc_color VARCHAR(20) NOT NULL DEFAULT '',
+                      outer_fit VARCHAR(20) NOT NULL DEFAULT '',
+                      top_fit VARCHAR(20) NOT NULL DEFAULT '',
+                      bottom_fit VARCHAR(20) NOT NULL DEFAULT '',
                       gender VARCHAR(2) NOT NULL DEFAULT '',
                       age_group VARCHAR(4) NOT NULL DEFAULT '',
                       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -601,6 +607,8 @@ public class StyleVoteController {
                 {"bottom_item", "VARCHAR(40) NOT NULL DEFAULT ''"}, {"bottom_color", "VARCHAR(20) NOT NULL DEFAULT ''"},
                 {"shoe_item", "VARCHAR(40) NOT NULL DEFAULT ''"}, {"shoe_color", "VARCHAR(20) NOT NULL DEFAULT ''"},
                 {"acc_item", "VARCHAR(40) NOT NULL DEFAULT ''"}, {"acc_color", "VARCHAR(20) NOT NULL DEFAULT ''"},
+                {"outer_fit", "VARCHAR(20) NOT NULL DEFAULT ''"}, {"top_fit", "VARCHAR(20) NOT NULL DEFAULT ''"},
+                {"bottom_fit", "VARCHAR(20) NOT NULL DEFAULT ''"},
         };
         for (String[] c : columns) addColumnIfMissing(c[0], c[1]);
         widenIfNeeded("look_id", 40, "VARCHAR(40) NOT NULL");
@@ -609,12 +617,25 @@ public class StyleVoteController {
         jdbc.update("UPDATE style_posts SET category = 'TIP' WHERE category = 'ITEM'");
         // 1차 데님 페이지(wide/straight/relaxed)에 올라온 색조합은 그 데님을 하의로 입은 코디
         jdbc.update("UPDATE style_posts SET bottom_item = look_id WHERE category = 'OUTFIT' AND bottom_item = '' AND look_id IN ('wide','straight','relaxed')");
+        // 핏별로 나뉘어 있던 아이템을 "아이템 + 핏"으로 합친다 (와이드 데님 -> 데님 팬츠 + 와이드)
+        for (String[] m : MERGED) {
+            String old = m[0], item = m[1], fit = m[2], slot = m[3];
+            jdbc.update("UPDATE style_posts SET " + slot + "_fit = ?, " + slot + "_item = ? WHERE " + slot + "_item = ?", fit, item, old);
+            jdbc.update("UPDATE style_posts SET look_id = ? WHERE look_id = ?", item, old);
+        }
         for (var e : StylePalette.LEGACY.entrySet()) {
             for (String col : List.of("top_color", "bottom_color", "shoe_color")) {
                 jdbc.update("UPDATE style_posts SET " + col + " = ? WHERE " + col + " = ?", e.getValue(), e.getKey());
             }
         }
     }
+
+    /** 예전 아이템 id, 지금 아이템 id, 핏, 칸 (프론트 catalog.ts 의 legacyItems 와 같다) */
+    static final String[][] MERGED = {
+            {"wide", "denim", "wide", "bottom"}, {"straight", "denim", "straight", "bottom"}, {"relaxed", "denim", "relaxed", "bottom"},
+            {"bootcut", "denim", "bootcut", "bottom"}, {"skinny", "denim", "skinny", "bottom"},
+            {"chinos", "cotton-pants", "straight", "bottom"}, {"crop-tee", "short-tee", "crop", "top"},
+    };
 
     private void addColumnIfMissing(String column, String definition) {
         Integer exists = jdbc.queryForObject("""
@@ -632,62 +653,62 @@ public class StyleVoteController {
 
     /**
      * 처음부터 아이템 페이지가 비어 보이지 않도록 넣는 예시 코디 ("FYOF 예시").
-     * 형식: 아우터|상의|하의|신발|액세서리|제목|한마디|성별|연령  (칸은 "아이템:색", 없으면 "-")
+     * 형식: 아우터|상의|하의|신발|액세서리|제목|한마디|성별|연령  (칸은 "아이템:색[:핏]", 없으면 "-")
      */
     private static final String[] SEEDS = {
-            "-|oxford-shirt:white|wide:indigo|loafers:black|-|화이트 셔츠 + 인디고 와이드|가장 깔끔한 정석 조합|F|20s",
-            "-|crew-knit:ivory|wide:indigo|loafers:brown|-|아이보리 니트 + 인디고|부드러운 톤온톤|F|30s",
-            "-|short-tee:white|wide:indigo|low-sneakers:white|ball-cap:black|화이트 티 + 인디고 와이드|여름 기본|M|20s",
-            "blazer:charcoal|short-tee:white|straight:mid-blue|loafers:black|-|차콜 블레이저 + 미드 블루|오피스 캐주얼|M|30s",
-            "-|oxford-shirt:white|straight:mid-blue|derby:brown|belt:brown|셔츠 + 스트레이트 데님||M|30s",
-            "ma1:black|crop-tee:gray|relaxed:light-blue|low-sneakers:white|-|블랙 항공점퍼 + 워시드 블루|스트릿 무드엔 대비가 핵심|F|20s",
-            "hood-zipup:gray|short-tee:white|relaxed:light-blue|running-shoes:gray|-|후드집업 + 릴랙스 데님||M|10s",
-            "mustang:brown|turtleneck:ivory|straight:indigo|chelsea-boots:brown|muffler:camel|브라운 무스탕 정석|무스탕엔 터틀넥|F|30s",
+            "-|oxford-shirt:white|denim:indigo:wide|loafers:black|-|화이트 셔츠 + 인디고 와이드|가장 깔끔한 정석 조합|F|20s",
+            "-|crew-knit:ivory|denim:indigo:wide|loafers:brown|-|아이보리 니트 + 인디고|부드러운 톤온톤|F|30s",
+            "-|short-tee:white:over|denim:indigo:wide|low-sneakers:white|ball-cap:black|화이트 티 + 인디고 와이드|여름 기본|M|20s",
+            "blazer:charcoal:over|short-tee:white:regular|denim:mid-blue:straight|loafers:black|-|차콜 블레이저 + 미드 블루|오피스 캐주얼|M|30s",
+            "-|oxford-shirt:white|denim:mid-blue:straight|derby:brown|belt:brown|셔츠 + 스트레이트 데님||M|30s",
+            "ma1:black:crop|short-tee:gray:crop|denim:light-blue:relaxed|low-sneakers:white|-|블랙 항공점퍼 + 워시드 블루|스트릿 무드엔 대비가 핵심|F|20s",
+            "hood-zipup:gray:over|short-tee:white:over|denim:light-blue:relaxed|running-shoes:gray|-|후드집업 + 릴랙스 데님||M|10s",
+            "mustang:brown|turtleneck:ivory|denim:indigo:straight|chelsea-boots:brown|muffler:camel|브라운 무스탕 정석|무스탕엔 터틀넥|F|30s",
             "mustang:black|crew-knit:charcoal|slacks:black|derby:black|-|블랙 무스탕 + 모노톤|시크한 겨울|M|30s",
-            "mustang:camel|hoodie:gray|wide:mid-blue|work-boots:brown|beanie:black|카멜 무스탕 + 후드티|캐주얼하게|M|20s",
+            "mustang:camel|hoodie:gray|denim:mid-blue:wide|work-boots:brown|beanie:black|카멜 무스탕 + 후드티|캐주얼하게|M|20s",
             "light-padding:black|hoodie:gray|jogger:black|running-shoes:black|backpack:black|경량패딩 + 후드티|편한 등굣길|M|10s",
-            "light-padding:navy|oxford-shirt:light-blue|chinos:beige|loafers:brown|-|네이비 경량패딩 + 셔츠|단정한 간절기|M|40s",
+            "light-padding:navy|oxford-shirt:light-blue|cotton-pants:beige:straight|loafers:brown|-|네이비 경량패딩 + 셔츠|단정한 간절기|M|40s",
             "long-padding:black|hoodie:gray|jogger:gray|ugg-boots:beige|beanie:black|롱패딩 + 조거|한겨울 생존 코디|F|10s",
-            "long-padding:beige|crew-knit:ivory|wide:indigo|low-sneakers:white|muffler:camel|베이지 롱패딩 + 아이보리 니트|밝은 겨울|F|20s",
+            "long-padding:beige|crew-knit:ivory|denim:indigo:wide|low-sneakers:white|muffler:camel|베이지 롱패딩 + 아이보리 니트|밝은 겨울|F|20s",
             "short-padding:black|long-sleeve:white|cargo:khaki|high-sneakers:black|beanie:gray|숏패딩 + 카고|비율 좋은 겨울 스트릿|M|20s",
-            "short-padding:ivory|turtleneck:black|wide:black|work-boots:black|-|아이보리 숏패딩 + 올블랙||F|20s",
+            "short-padding:ivory|turtleneck:black|denim:black:wide|work-boots:black|-|아이보리 숏패딩 + 올블랙||F|20s",
             "hood-zipup:black|long-sleeve:white|cargo:black|high-sneakers:black|ball-cap:black|올블랙 후드집업||M|20s",
-            "-|hoodie:navy|slacks:gray|low-sneakers:white|-|후드티 + 슬랙스|편한데 단정하게|M|30s",
-            "trench-coat:beige|stripe-shirt:light-blue|straight:indigo|loafers:black|tote-bag:ivory|트렌치 + 스트라이프 셔츠|봄 정석|F|30s",
+            "-|hoodie:navy:over|slacks:gray:wide|low-sneakers:white|-|후드티 + 슬랙스|편한데 단정하게|M|30s",
+            "trench-coat:beige|stripe-shirt:light-blue|denim:indigo:straight|loafers:black|tote-bag:ivory|트렌치 + 스트라이프 셔츠|봄 정석|F|30s",
             "trench-coat:beige|turtleneck:black|slacks:black|chelsea-boots:black|-|베이지 트렌치 + 블랙 터틀넥||F|30s",
             "wool-coat:camel|turtleneck:black|slacks:charcoal|derby:black|muffler:gray|카멜 코트 + 블랙 터틀넥|대비가 예쁜 겨울|M|30s",
-            "wool-coat:charcoal|crew-knit:ivory|straight:indigo|loafers:black|-|차콜 코트 + 아이보리 니트||M|40s",
-            "wool-coat:black|hoodie:gray|wide:mid-blue|low-sneakers:white|-|블랙 코트 + 후드티|꾸안꾸|M|20s",
-            "leather-jacket:black|short-tee:white|skinny:black|chelsea-boots:black|-|가죽 자켓 + 화이트 티|라이더 정석|M|20s",
-            "leather-jacket:brown|crew-knit:ivory|straight:mid-blue|work-boots:brown|-|브라운 레더 + 니트||F|30s",
+            "wool-coat:charcoal|crew-knit:ivory|denim:indigo:straight|loafers:black|-|차콜 코트 + 아이보리 니트||M|40s",
+            "wool-coat:black|hoodie:gray|denim:mid-blue:wide|low-sneakers:white|-|블랙 코트 + 후드티|꾸안꾸|M|20s",
+            "leather-jacket:black|short-tee:white|denim:black:skinny|chelsea-boots:black|-|가죽 자켓 + 화이트 티|라이더 정석|M|20s",
+            "leather-jacket:brown|crew-knit:ivory|denim:mid-blue:straight|work-boots:brown|-|브라운 레더 + 니트||F|30s",
             "denim-jacket:mid-blue|hoodie:gray|slacks:black|low-sneakers:white|-|청자켓 + 후드티|청청 대신 블랙 하의|M|20s",
-            "denim-jacket:light-blue|short-tee:white|chinos:beige|low-sneakers:white|bucket-hat:beige|라이트 청자켓 + 베이지||F|20s",
+            "denim-jacket:light-blue|short-tee:white|cotton-pants:beige:straight|low-sneakers:white|bucket-hat:beige|라이트 청자켓 + 베이지||F|20s",
             "windbreaker:black|long-sleeve:white|slacks:black|running-shoes:gray|cross-bag:black|바람막이 + 슬랙스|고프코어|M|20s",
             "fleece:ivory|long-sleeve:white|corduroy:brown|work-boots:brown|beanie:ivory|플리스 + 코듀로이|포근한 주말|F|20s",
-            "cardigan:gray|oxford-shirt:white|chinos:beige|loafers:brown|-|그레이 가디건 + 셔츠||M|30s",
-            "cardigan:navy|short-tee:white|wide:light-blue|mary-jane:black|-|네이비 가디건 + 라이트 데님||F|20s",
-            "field-jacket:khaki|short-tee:white|straight:mid-blue|low-sneakers:white|-|카키 야상 + 화이트 티||M|30s",
+            "cardigan:gray|oxford-shirt:white|cotton-pants:beige:straight|loafers:brown|-|그레이 가디건 + 셔츠||M|30s",
+            "cardigan:navy|short-tee:white|denim:light-blue:wide|mary-jane:black|-|네이비 가디건 + 라이트 데님||F|20s",
+            "field-jacket:khaki|short-tee:white|denim:mid-blue:straight|low-sneakers:white|-|카키 야상 + 화이트 티||M|30s",
             "padding-vest:black|hoodie:gray|cargo:khaki|running-shoes:black|-|패딩 베스트 + 후드티 레이어드||M|20s",
-            "-|sweatshirt:gray|wide:indigo|low-sneakers:white|ball-cap:navy|그레이 맨투맨 + 인디고|실패 없는 조합|F|20s",
+            "-|sweatshirt:gray:semi-over|denim:indigo:wide|low-sneakers:white|ball-cap:navy|그레이 맨투맨 + 인디고|실패 없는 조합|F|20s",
             "-|half-zip:navy|slacks:gray|loafers:black|-|하프집업 + 슬랙스||M|30s",
             "-|knit-vest:navy|pleated-skirt:gray|mary-jane:black|-|니트 베스트 + 플리츠|프레피 스타일|F|20s",
-            "-|polo-shirt:navy|chinos:beige|loafers:brown|belt:brown|폴로 + 치노|여름 출근룩|M|40s",
+            "-|polo-shirt:navy|cotton-pants:beige:straight|loafers:brown|belt:brown|폴로 + 치노|여름 출근룩|M|40s",
             "-|linen-shirt:white|shorts:beige|sandals:brown|bucket-hat:beige|린넨 셔츠 + 반바지|시원한 여름|M|30s",
             "-|short-tee:black|shorts:black|slides:black|ball-cap:black|올블랙 여름||M|10s",
-            "-|rugby-shirt:navy|straight:light-blue|low-sneakers:white|-|럭비 셔츠 + 라이트 데님|빈티지 무드|M|20s",
+            "-|rugby-shirt:navy|denim:light-blue:straight|low-sneakers:white|-|럭비 셔츠 + 라이트 데님|빈티지 무드|M|20s",
             "-|blouse:white|long-skirt:black|loafers:black|tote-bag:black|블라우스 + 롱스커트||F|30s",
-            "-|crop-tee:white|wide:mid-blue|low-sneakers:white|cross-bag:black|크롭 티 + 와이드 데님|다리가 길어 보여요|F|10s",
+            "-|short-tee:white:crop|denim:mid-blue:wide|low-sneakers:white|cross-bag:black|크롭 티 + 와이드 데님|다리가 길어 보여요|F|10s",
             "-|flannel-shirt:burgundy|cargo:black|work-boots:black|beanie:black|체크 셔츠 + 카고||M|20s",
             "-|denim-shirt:light-blue|slacks:black|loafers:black|-|데님 셔츠 + 블랙 슬랙스||M|30s",
-            "blazer:navy|turtleneck:ivory|chinos:beige|loafers:brown|-|네이비 블레이저 + 치노||M|40s",
-            "-|sleeveless:white|wide:indigo|slides:black|-|슬리브리스 + 와이드 데님|한여름|F|20s",
-            "-|henley:gray|straight:indigo|chelsea-boots:brown|-|헨리넥 + 인디고 데님||M|30s",
+            "blazer:navy|turtleneck:ivory|cotton-pants:beige:straight|loafers:brown|-|네이비 블레이저 + 치노||M|40s",
+            "-|sleeveless:white|denim:indigo:wide|slides:black|-|슬리브리스 + 와이드 데님|한여름|F|20s",
+            "-|henley:gray|denim:indigo:straight|chelsea-boots:brown|-|헨리넥 + 인디고 데님||M|30s",
             "cardigan:ivory|camisole:black|long-skirt:beige|mary-jane:black|-|가디건 + 캐미솔 레이어드||F|20s",
             "-|stripe-shirt:navy|mini-skirt:indigo|loafers:black|-|스트라이프 셔츠 + 데님 미니||F|20s",
-            "ma1:khaki|hoodie:gray|wide:black|high-sneakers:white|-|카키 항공점퍼 + 후드티||M|20s",
-            "work-jacket:brown|hoodie:ivory|wide:indigo|work-boots:brown|-|워크 자켓 + 아이보리 후드|워크웨어 무드|M|20s",
+            "ma1:khaki|hoodie:gray|denim:black:wide|high-sneakers:white|-|카키 항공점퍼 + 후드티||M|20s",
+            "work-jacket:brown|hoodie:ivory|denim:indigo:wide|work-boots:brown|-|워크 자켓 + 아이보리 후드|워크웨어 무드|M|20s",
             "blazer:black|short-tee:white|track-pants:black|low-sneakers:white|-|블레이저 + 트랙 팬츠|요즘 믹스매치|F|20s",
-            "-|long-sleeve:ivory|bootcut:indigo|chelsea-boots:black|belt:black|롱슬리브 + 부츠컷||F|30s",
+            "-|long-sleeve:ivory|denim:indigo:bootcut|chelsea-boots:black|belt:black|롱슬리브 + 부츠컷||F|30s",
             "-|sweatshirt:navy|jogger:gray|running-shoes:white|backpack:navy|맨투맨 + 조거|등굣길|M|10s",
             "-|crew-knit:brown|corduroy:beige|loafers:brown|glasses:brown|브라운 니트 + 코듀로이|가을 톤온톤|M|30s",
             "light-padding:beige|turtleneck:ivory|corduroy:brown|loafers:brown|-|베이지 경량패딩 + 코듀로이||F|30s",
@@ -699,7 +720,8 @@ public class StyleVoteController {
             String[] f = line.split("\\|", -1);
             Piece[] pieces = new Piece[5];
             for (int i = 0; i < 5; i++) {
-                pieces[i] = "-".equals(f[i]) ? Piece.NONE : new Piece(f[i].split(":")[0], f[i].split(":")[1]);
+                String[] part = f[i].split(":");
+                pieces[i] = "-".equals(f[i]) ? Piece.NONE : new Piece(part[0], part[1], part.length > 2 ? part[2] : "");
             }
             Outfit outfit = new Outfit(pieces[0], pieces[1], pieces[2], pieces[3], pieces[4]);
             insert(pieces[2].item(), "OUTFIT", f[5], outfitHexes(outfit), f[6], "FYOF 예시", "", outfit, f[7], f[8]);
@@ -715,12 +737,13 @@ public class StyleVoteController {
             var ps = con.prepareStatement("""
                     INSERT INTO style_posts (look_id, category, title, colors, comment, nickname, author_id,
                         outer_item, outer_color, top_item, top_color, bottom_item, bottom_color, shoe_item, shoe_color, acc_item, acc_color,
-                        gender, age_group, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())""",
+                        gender, age_group, outer_fit, top_fit, bottom_fit, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())""",
                     java.sql.Statement.RETURN_GENERATED_KEYS);
             String[] values = {item, category, title, String.join(",", colors), comment, nickname, author,
                     o.outer().item(), o.outer().color(), o.top().item(), o.top().color(), o.bottom().item(), o.bottom().color(),
-                    o.shoes().item(), o.shoes().color(), o.acc().item(), o.acc().color(), gender, age};
+                    o.shoes().item(), o.shoes().color(), o.acc().item(), o.acc().color(), gender, age,
+                    o.outer().fit(), o.top().fit(), o.bottom().fit()};
             for (int i = 0; i < values.length; i++) ps.setString(i + 1, values[i]);
             return ps;
         }, keys);
@@ -761,13 +784,15 @@ public class StyleVoteController {
     private static Piece piece(Piece p, String label, boolean required) {
         String item = p == null || p.item() == null ? "" : p.item();
         String color = p == null || p.color() == null ? "" : p.color();
+        String fit = p == null || p.fit() == null ? "" : p.fit();
         if (item.isEmpty() && color.isEmpty()) {
             if (required) throw bad(label + "을(를) 골라 주세요.");
             return Piece.NONE;
         }
         if (!StylePalette.isItem(item)) throw bad(label + " 아이템을 골라 주세요.");
         if (!StylePalette.isColor(color)) throw bad(label + " 색을 골라 주세요.");
-        return new Piece(item, color);
+        if (!FIT_ID.matcher(fit).matches()) throw bad(label + " 핏이 올바르지 않아요.");
+        return new Piece(item, color, fit);
     }
 
     private static List<String> outfitHexes(Outfit o) {
@@ -777,11 +802,11 @@ public class StyleVoteController {
 
     static Outfit outfitOf(ResultSet rs) throws SQLException {
         return new Outfit(
-                new Piece(rs.getString("outer_item"), rs.getString("outer_color")),
-                new Piece(rs.getString("top_item"), rs.getString("top_color")),
-                new Piece(rs.getString("bottom_item"), rs.getString("bottom_color")),
-                new Piece(rs.getString("shoe_item"), rs.getString("shoe_color")),
-                new Piece(rs.getString("acc_item"), rs.getString("acc_color")));
+                new Piece(rs.getString("outer_item"), rs.getString("outer_color"), rs.getString("outer_fit")),
+                new Piece(rs.getString("top_item"), rs.getString("top_color"), rs.getString("top_fit")),
+                new Piece(rs.getString("bottom_item"), rs.getString("bottom_color"), rs.getString("bottom_fit")),
+                new Piece(rs.getString("shoe_item"), rs.getString("shoe_color"), ""),
+                new Piece(rs.getString("acc_item"), rs.getString("acc_color"), ""));
     }
 
     private static List<String> splitColors(String colors) {

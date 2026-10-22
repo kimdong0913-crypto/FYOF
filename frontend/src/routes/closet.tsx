@@ -81,7 +81,7 @@ function Closet() {
         : <div className="insight-outfit-grid home-outfit-grid">{outfits.map(o => <div key={o.id} className="insight-outfit light"><strong>{o.title}</strong><OutfitPieces outfit={o.outfit} compact/><small>추천 {o.weight - 1} · {categoryOf(itemById(o.outfit.bottom.item)?.category ?? "bottom").ko} 기준</small></div>)}</div>}
     </section>
 
-    <section className="products-section closet-section"><div className="section-heading"><div><span className="eyebrow">03 / FITTING RESULTS</span><h2>저장한 피팅 결과</h2></div><Button asChild variant="link"><Link to="/fitting" search={{ item: "wide" }}>피팅하러 가기 <ArrowUpRight size={16}/></Link></Button></div>
+    <section className="products-section closet-section"><div className="section-heading"><div><span className="eyebrow">03 / FITTING RESULTS</span><h2>저장한 피팅 결과</h2></div><Button asChild variant="link"><Link to="/fitting" search={{ item: "denim", fit: "wide" }}>피팅하러 가기 <ArrowUpRight size={16}/></Link></Button></div>
       {status === "loading" && <p className="vote-empty">불러오는 중…</p>}
       {status === "error" && <p className="vote-empty">옷장 서버에 연결할 수 없습니다.</p>}
       {status === "ready" && fits.length === 0 && <p className="vote-empty">아직 저장한 피팅 결과가 없어요. 가상 피팅에서 "옷장에 저장"을 눌러 보세요.</p>}

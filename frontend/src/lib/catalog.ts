@@ -39,9 +39,11 @@ export type Item = {
   colors: string[];    // 많이 입는 색 (palette.ts id)
   tips: string[];      // 이렇게 입어요
   aliases: string[];   // 검색어
-  image: string;       // 목록·가이드에 보이는 도식 그림
-  photo?: string;      // 실제 옷 사진 (AI 피팅에 보내는 이미지). 데님 3종만 있음
-  hasPhoto: boolean; photoType?: "flat-lay" | "model";
+  fits: string[];      // 고를 수 있는 핏 (fits.ts id). 핏이 없는 아이템은 []
+  defaultFit?: string; // 처음 보여 줄 핏
+  image: string;       // 목록·가이드에 보이는 도식 그림 (기본 핏)
+  photos?: Record<string, { image: string; photoType: "flat-lay" | "model" }>; // 핏별 실제 사진 (AI 피팅용). 데님만 있음
+  hasPhoto: boolean;
 };
 
 // 도식 그림이 없는 아이템에 쓰는 회색 자리표시 이미지
@@ -51,88 +53,90 @@ function placeholder(category: CategoryId, label: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-type Def = [id: string, name: string, english: string, season: string, colors: string, tips: string[], aliases?: string];
-// 1차 때 찍은 실제 사진. 화면에는 다른 아이템과 톤을 맞춰 도식 그림을 쓰고, 사진은 AI 피팅에만 쓴다.
-const photos: Record<string, { image: string; photoType: "flat-lay" | "model" }> = {
-  wide: { image: denim, photoType: "flat-lay" },
-  straight: { image: straight, photoType: "model" },
-  relaxed: { image: relaxed, photoType: "model" },
+type Def = [id: string, name: string, english: string, season: string, colors: string, tips: string[], aliases?: string, fits?: string];
+// 1차 때 찍은 실제 사진 (데님 팬츠의 핏별). 화면에는 도식 그림을 쓰고, 사진은 AI 피팅에만 쓴다.
+const photos: Record<string, Record<string, { image: string; photoType: "flat-lay" | "model" }>> = {
+  denim: {
+    wide: { image: denim, photoType: "flat-lay" },
+    straight: { image: straight, photoType: "model" },
+    relaxed: { image: relaxed, photoType: "model" },
+  },
 };
+// 핏을 정하는 기본값: 바지는 스트레이트, 상의는 레귤러, 아우터는 레귤러 (목록에 없으면 첫 번째)
+const preferred = ["straight", "regular", "wide"];
 
 function build(category: CategoryId, defs: Def[]): Item[] {
-  return defs.map(([id, name, english, season, colors, tips, aliases = ""]) => {
-    const photo = photos[id];
+  return defs.map(([id, name, english, season, colors, tips, aliases = "", fitList = ""]) => {
+    const fits = fitList ? fitList.split(" ") : [];
+    const defaultFit = preferred.find(f => fits.includes(f)) ?? fits[0];
+    const itemPhotos = photos[id];
     return {
-      id, category, name, english, season, tips,
+      id, category, name, english, season, tips, fits,
+      ...(defaultFit ? { defaultFit } : {}),
       colors: colors.split(" "),
       aliases: aliases ? aliases.split(" ") : [],
-      // 대표 색으로 칠한 도식 그림 (flats.ts)
-      image: flatImage(id, colorById(colors.split(" ")[0])?.hex ?? "#9A9A9A") ?? placeholder(category, name),
-      hasPhoto: Boolean(photo),
-      ...(photo ? { photo: photo.image, photoType: photo.photoType } : {}),
+      // 대표 색 + 기본 핏으로 칠한 도식 그림 (flats.ts)
+      image: flatImage(id, colorById(colors.split(" ")[0])?.hex ?? "#9A9A9A", defaultFit) ?? placeholder(category, name),
+      hasPhoto: Boolean(itemPhotos),
+      ...(itemPhotos ? { photos: itemPhotos } : {}),
     };
   });
 }
 
 export const items: Item[] = [
   ...build("outer", [
-    ["mustang", "무스탕", "SHEARLING JACKET", "겨울", "brown camel black", ["안쪽 털이 보이는 칼라가 포인트라 이너는 단정한 니트나 터틀넥이 좋아요.", "부피가 있어서 하의는 스트레이트·슬림한 핏으로 균형을 맞춰요."], "무스탕 시어링 양털"],
-    ["light-padding", "경량패딩", "LIGHT DOWN JACKET", "가을·겨울", "black navy beige khaki", ["얇아서 코트·재킷 안에 이너 패딩으로 겹쳐 입기 좋아요.", "단독으로 입을 땐 후드티를 받쳐 캐주얼하게 입어요."], "경량 이너패딩 초경량"],
+    ["mustang", "무스탕", "SHEARLING JACKET", "겨울", "brown camel black", ["안쪽 털이 보이는 칼라가 포인트라 이너는 단정한 니트나 터틀넥이 좋아요.", "부피가 있어서 하의는 스트레이트·슬림한 핏으로 균형을 맞춰요."], "무스탕 시어링 양털", "crop regular long"],
+    ["light-padding", "경량패딩", "LIGHT DOWN JACKET", "가을·겨울", "black navy beige khaki", ["얇아서 코트·재킷 안에 이너 패딩으로 겹쳐 입기 좋아요.", "단독으로 입을 땐 후드티를 받쳐 캐주얼하게 입어요."], "경량 이너패딩 초경량", "crop regular over"],
     ["long-padding", "롱패딩", "LONG PADDED COAT", "겨울", "black navy beige white", ["무릎 아래까지 덮으니 하의는 슬림하게, 신발은 볼륨 있는 걸로 맞춰요.", "블랙이 가장 무난하고, 베이지·화이트는 밝은 니트와 잘 어울려요."], "롱패딩 벤치파카"],
     ["short-padding", "숏패딩", "SHORT PUFFER", "겨울", "black ivory navy olive", ["짧은 기장이라 와이드 팬츠와 입으면 비율이 좋아 보여요.", "볼륨이 커서 상의는 얇게, 하의는 넉넉하게 입어요."], "숏패딩 푸퍼 패딩"],
     ["padding-vest", "패딩 베스트", "PADDED VEST", "가을·겨울", "black khaki navy", ["후드티나 셔츠 위에 겹쳐 입는 레이어드 아이템이에요.", "팔이 자유로워 활동적인 코디에 좋아요."], "패딩조끼 베스트"],
-    ["hood-zipup", "후드집업", "HOODED ZIP-UP", "봄·가을", "gray black navy ivory", ["반팔이나 롱슬리브 위에 가볍게 걸쳐요.", "코트 안에 받쳐 입으면 후드가 밖으로 나와 꾸안꾸 느낌이 나요."], "후드집업 집업후드 후드자켓"],
-    ["blazer", "블레이저", "BLAZER", "봄·가을", "charcoal navy beige black", ["데님과 입으면 캐주얼, 슬랙스와 입으면 포멀해져요.", "이너는 화이트 티셔츠나 셔츠가 가장 무난해요."], "블레이저 정장자켓 테일러드"],
-    ["trench-coat", "트렌치코트", "TRENCH COAT", "봄·가을", "beige khaki navy black", ["허리 벨트를 묶으면 실루엣이 정돈돼요.", "베이지 트렌치엔 화이트·네이비 이너가 잘 어울려요."], "트렌치 바바리"],
-    ["wool-coat", "울 코트", "WOOL COAT", "겨울", "camel charcoal black navy", ["니트·터틀넥과 입으면 차분한 겨울 코디가 돼요.", "카멜 코트는 블랙·화이트 이너와 대비가 좋아요."], "코트 싱글코트 롱코트 울코트"],
-    ["leather-jacket", "가죽 자켓", "LEATHER JACKET", "봄·가을", "black brown", ["화이트 티셔츠 + 데님이 정석 조합이에요.", "부츠와 함께 입으면 단단한 인상이 강해져요."], "가죽자켓 라이더자켓 레더"],
-    ["denim-jacket", "데님 자켓", "DENIM JACKET", "봄·가을", "mid-blue light-blue indigo black", ["하의는 데님보다 블랙·베이지 팬츠로 톤을 나누면 깔끔해요.", "후드티를 안에 입으면 캐주얼한 레이어드가 돼요."], "청자켓 데님자켓 트러커"],
-    ["ma1", "항공점퍼", "MA-1 BOMBER", "가을·겨울", "khaki black navy", ["짧은 기장이라 와이드·카고 팬츠와 잘 맞아요.", "후드티를 받쳐 입으면 스트릿 무드가 나요."], "항공점퍼 블루종 봄버"],
-    ["track-jacket", "트랙 자켓", "TRACK JACKET", "봄·가을", "black navy burgundy", ["소매 옆줄이 포인트라 안에는 단색 티셔츠가 깔끔해요.", "같은 색 트랙 팬츠와 셋업으로 입거나, 데님·슬랙스와 섞으면 요즘 많이 입는 블록코어 스타일이 돼요."], "져지 저지 트랙자켓 트랙탑 트레이닝자켓 블록코어"],
-    ["windbreaker", "바람막이", "WINDBREAKER", "봄·가을", "black navy khaki", ["가벼운 아웃도어 무드라 조거·카고 팬츠와 어울려요.", "슬랙스와 섞으면 요즘 많이 입는 고프코어 스타일이 돼요."], "바람막이 윈드브레이커 아노락"],
-    ["fleece", "플리스", "FLEECE JACKET", "가을·겨울", "ivory brown gray", ["포근한 질감이라 데님과 입으면 편한 주말 코디가 돼요.", "아이보리 플리스는 브라운·카키 하의와 잘 어울려요."], "플리스 후리스 뽀글이"],
-    ["cardigan", "가디건", "CARDIGAN", "봄·가을", "gray navy ivory black", ["티셔츠 위에 단추를 열어 걸치면 부드러운 인상이 돼요.", "단추를 모두 잠그면 니트처럼 단독으로도 입을 수 있어요."], "가디건 니트가디건"],
-    ["field-jacket", "필드 자켓", "FIELD JACKET", "봄·가을", "khaki olive beige", ["주머니가 많은 밀리터리 아이템이라 하의는 단순하게 입어요.", "카키 자켓 + 화이트 티 + 데님이 무난한 조합이에요."], "야상 필드자켓 사파리"],
-    ["work-jacket", "워크 자켓", "WORK JACKET", "봄·가을", "brown black beige", ["캔버스 원단의 워크웨어라 카펜터·데님 팬츠와 잘 맞아요.", "후드티를 받쳐 입으면 늦가을까지 입을 수 있어요."], "워크자켓 초어자켓 카펜터"],
+    ["hood-zipup", "후드집업", "HOODED ZIP-UP", "봄·가을", "gray black navy ivory", ["반팔이나 롱슬리브 위에 가볍게 걸쳐요.", "코트 안에 받쳐 입으면 후드가 밖으로 나와 꾸안꾸 느낌이 나요."], "후드집업 집업후드 후드자켓", "crop regular over"],
+    ["blazer", "블레이저", "BLAZER", "봄·가을", "charcoal navy beige black", ["데님과 입으면 캐주얼, 슬랙스와 입으면 포멀해져요.", "이너는 화이트 티셔츠나 셔츠가 가장 무난해요."], "블레이저 정장자켓 테일러드", "crop regular over"],
+    ["trench-coat", "트렌치코트", "TRENCH COAT", "봄·가을", "beige khaki navy black", ["허리 벨트를 묶으면 실루엣이 정돈돼요.", "베이지 트렌치엔 화이트·네이비 이너가 잘 어울려요."], "트렌치 바바리", "regular over long"],
+    ["wool-coat", "울 코트", "WOOL COAT", "겨울", "camel charcoal black navy", ["니트·터틀넥과 입으면 차분한 겨울 코디가 돼요.", "카멜 코트는 블랙·화이트 이너와 대비가 좋아요."], "코트 싱글코트 롱코트 울코트", "regular over long"],
+    ["leather-jacket", "가죽 자켓", "LEATHER JACKET", "봄·가을", "black brown", ["화이트 티셔츠 + 데님이 정석 조합이에요.", "부츠와 함께 입으면 단단한 인상이 강해져요."], "가죽자켓 라이더자켓 레더", "crop regular over"],
+    ["denim-jacket", "데님 자켓", "DENIM JACKET", "봄·가을", "mid-blue light-blue indigo black", ["하의는 데님보다 블랙·베이지 팬츠로 톤을 나누면 깔끔해요.", "후드티를 안에 입으면 캐주얼한 레이어드가 돼요."], "청자켓 데님자켓 트러커", "crop regular over"],
+    ["ma1", "항공점퍼", "MA-1 BOMBER", "가을·겨울", "khaki black navy", ["짧은 기장이라 와이드·카고 팬츠와 잘 맞아요.", "후드티를 받쳐 입으면 스트릿 무드가 나요."], "항공점퍼 블루종 봄버", "crop regular over"],
+    ["track-jacket", "트랙 자켓", "TRACK JACKET", "봄·가을", "black navy burgundy", ["소매 옆줄이 포인트라 안에는 단색 티셔츠가 깔끔해요.", "같은 색 트랙 팬츠와 셋업으로 입거나, 데님·슬랙스와 섞으면 요즘 많이 입는 블록코어 스타일이 돼요."], "져지 저지 트랙자켓 트랙탑 트레이닝자켓 블록코어", "crop regular over"],
+    ["windbreaker", "바람막이", "WINDBREAKER", "봄·가을", "black navy khaki", ["가벼운 아웃도어 무드라 조거·카고 팬츠와 어울려요.", "슬랙스와 섞으면 요즘 많이 입는 고프코어 스타일이 돼요."], "바람막이 윈드브레이커 아노락", "crop regular over"],
+    ["fleece", "플리스", "FLEECE JACKET", "가을·겨울", "ivory brown gray", ["포근한 질감이라 데님과 입으면 편한 주말 코디가 돼요.", "아이보리 플리스는 브라운·카키 하의와 잘 어울려요."], "플리스 후리스 뽀글이", "crop regular over"],
+    ["cardigan", "가디건", "CARDIGAN", "봄·가을", "gray navy ivory black", ["티셔츠 위에 단추를 열어 걸치면 부드러운 인상이 돼요.", "단추를 모두 잠그면 니트처럼 단독으로도 입을 수 있어요."], "가디건 니트가디건", "crop regular over"],
+    ["field-jacket", "필드 자켓", "FIELD JACKET", "봄·가을", "khaki olive beige", ["주머니가 많은 밀리터리 아이템이라 하의는 단순하게 입어요.", "카키 자켓 + 화이트 티 + 데님이 무난한 조합이에요."], "야상 필드자켓 사파리", "regular over"],
+    ["work-jacket", "워크 자켓", "WORK JACKET", "봄·가을", "brown black beige", ["캔버스 원단의 워크웨어라 카펜터·데님 팬츠와 잘 맞아요.", "후드티를 받쳐 입으면 늦가을까지 입을 수 있어요."], "워크자켓 초어자켓 카펜터", "crop regular over"],
   ]),
   ...build("top", [
-    ["short-tee", "반팔 티셔츠", "SHORT SLEEVE TEE", "여름", "white black gray navy", ["가장 기본 아이템이라 어떤 하의와도 잘 어울려요.", "오버핏 반팔은 와이드 팬츠, 레귤러핏은 슬림 팬츠와 맞춰요."], "반팔 티셔츠 반팔티 티"],
-    ["long-sleeve", "롱슬리브", "LONG SLEEVE TEE", "봄·가을", "white black gray ivory", ["단독으로도, 반팔 안에 레이어드해도 좋아요.", "셔츠나 후드집업 안에 받쳐 입는 이너로도 많이 써요."], "롱슬리브 긴팔티 긴팔 롱티"],
-    ["sweatshirt", "맨투맨", "SWEATSHIRT", "봄·가을", "gray navy black ivory", ["안에 셔츠 칼라를 꺼내 입으면 단정해 보여요.", "그레이 맨투맨 + 데님은 실패 없는 조합이에요."], "맨투맨 스웨트셔츠 스웻"],
-    ["hoodie", "후드티", "HOODIE", "봄·가을·겨울", "gray black navy ivory", ["코트·블레이저 안에 입으면 후드가 포인트가 돼요.", "와이드 팬츠나 조거와 입으면 편한 스트릿 코디가 돼요."], "후드티 후디 후드"],
-    ["half-zip", "하프집업", "HALF ZIP SWEAT", "가을·겨울", "gray navy ivory", ["지퍼를 열어 안에 티셔츠를 살짝 보이게 입어요.", "슬랙스와 입으면 캐주얼하면서 단정해요."], "하프집업 반집업 하프지퍼"],
-    ["crew-knit", "크루넥 니트", "CREW NECK KNIT", "가을·겨울", "ivory gray navy brown", ["셔츠를 안에 받쳐 입는 레이어드가 정석이에요.", "코트 안에 입기 좋은 겨울 기본 아이템이에요."], "니트 스웨터 크루넥"],
-    ["knit-vest", "니트 베스트", "KNIT VEST", "봄·가을", "ivory navy brown gray", ["셔츠나 롱슬리브 위에 겹쳐 입는 아이템이에요.", "슬랙스와 입으면 단정한 프레피 스타일이 돼요."], "니트베스트 니트조끼 조끼"],
-    ["oxford-shirt", "옥스포드 셔츠", "OXFORD SHIRT", "봄·가을", "white light-blue pink", ["단추를 몇 개 열고 소매를 걷으면 캐주얼해져요.", "니트나 맨투맨 안에 받쳐 입는 레이어드 아이템으로도 좋아요."], "셔츠 옥스포드셔츠 남방"],
-    ["stripe-shirt", "스트라이프 셔츠", "STRIPE SHIRT", "봄·여름", "light-blue white navy", ["무늬가 있으니 하의는 단색으로 정리해요.", "블루 스트라이프 + 베이지 팬츠가 산뜻해요."], "스트라이프셔츠 줄무늬셔츠"],
-    ["linen-shirt", "린넨 셔츠", "LINEN SHIRT", "여름", "white beige khaki", ["통기성이 좋아 여름 반팔 대신 많이 입어요.", "단추를 열어 반팔 위에 걸치면 아우터처럼 입을 수 있어요."], "린넨셔츠 마셔츠"],
-    ["flannel-shirt", "체크 셔츠", "FLANNEL CHECK SHIRT", "가을·겨울", "burgundy navy khaki", ["열어서 반팔·후드티 위에 걸치면 아우터처럼 쓸 수 있어요.", "체크 색 중 하나를 하의 색으로 맞추면 통일감이 생겨요."], "체크셔츠 플란넬 남방"],
-    ["denim-shirt", "데님 셔츠", "DENIM SHIRT", "봄·가을", "light-blue mid-blue", ["하의는 블랙·베이지로 톤을 나눠 입어요.", "화이트 티 위에 셔켓처럼 열어 입어도 좋아요."], "청남방 데님셔츠"],
-    ["polo-shirt", "폴로 셔츠", "POLO SHIRT", "여름", "navy white black", ["칼라가 있어 반팔 티보다 단정해 보여요.", "슬랙스·치노와 입으면 깔끔한 여름 출근룩이 돼요."], "피케 카라티 폴로"],
-    ["rugby-shirt", "럭비 셔츠", "RUGBY SHIRT", "봄·가을", "navy burgundy", ["굵은 줄무늬가 포인트라 하의는 단색이 좋아요.", "데님과 입으면 캐주얼한 빈티지 무드가 나요."], "럭비티 카라맨투맨"],
-    ["blouse", "블라우스", "BLOUSE", "봄·여름", "white ivory pink", ["슬랙스·스커트와 입으면 단정한 오피스룩이 돼요.", "데님과 입으면 꾸민 듯 편한 데일리룩이 돼요."], "블라우스"],
-    ["crop-tee", "크롭 티셔츠", "CROPPED TEE", "여름", "white black gray", ["하이웨스트 하의와 입으면 다리가 길어 보여요.", "셔츠나 자켓을 열어 걸치면 노출을 줄일 수 있어요."], "크롭티 크롭"],
+    ["short-tee", "반팔 티셔츠", "SHORT SLEEVE TEE", "여름", "white black gray navy", ["가장 기본 아이템이라 어떤 하의와도 잘 어울려요.", "오버핏 반팔은 와이드 팬츠, 레귤러핏은 슬림 팬츠와 맞춰요."], "반팔 티셔츠 반팔티 티", "crop slim regular semi-over over boxy"],
+    ["long-sleeve", "롱슬리브", "LONG SLEEVE TEE", "봄·가을", "white black gray ivory", ["단독으로도, 반팔 안에 레이어드해도 좋아요.", "셔츠나 후드집업 안에 받쳐 입는 이너로도 많이 써요."], "롱슬리브 긴팔티 긴팔 롱티", "crop slim regular over"],
+    ["sweatshirt", "맨투맨", "SWEATSHIRT", "봄·가을", "gray navy black ivory", ["안에 셔츠 칼라를 꺼내 입으면 단정해 보여요.", "그레이 맨투맨 + 데님은 실패 없는 조합이에요."], "맨투맨 스웨트셔츠 스웻", "crop regular semi-over over"],
+    ["hoodie", "후드티", "HOODIE", "봄·가을·겨울", "gray black navy ivory", ["코트·블레이저 안에 입으면 후드가 포인트가 돼요.", "와이드 팬츠나 조거와 입으면 편한 스트릿 코디가 돼요."], "후드티 후디 후드", "crop regular semi-over over"],
+    ["half-zip", "하프집업", "HALF ZIP SWEAT", "가을·겨울", "gray navy ivory", ["지퍼를 열어 안에 티셔츠를 살짝 보이게 입어요.", "슬랙스와 입으면 캐주얼하면서 단정해요."], "하프집업 반집업 하프지퍼", "crop regular over"],
+    ["crew-knit", "크루넥 니트", "CREW NECK KNIT", "가을·겨울", "ivory gray navy brown", ["셔츠를 안에 받쳐 입는 레이어드가 정석이에요.", "코트 안에 입기 좋은 겨울 기본 아이템이에요."], "니트 스웨터 크루넥", "crop slim regular over"],
+    ["knit-vest", "니트 베스트", "KNIT VEST", "봄·가을", "ivory navy brown gray", ["셔츠나 롱슬리브 위에 겹쳐 입는 아이템이에요.", "슬랙스와 입으면 단정한 프레피 스타일이 돼요."], "니트베스트 니트조끼 조끼", "crop regular over"],
+    ["oxford-shirt", "옥스포드 셔츠", "OXFORD SHIRT", "봄·가을", "white light-blue pink", ["단추를 몇 개 열고 소매를 걷으면 캐주얼해져요.", "니트나 맨투맨 안에 받쳐 입는 레이어드 아이템으로도 좋아요."], "셔츠 옥스포드셔츠 남방", "slim regular semi-over over"],
+    ["stripe-shirt", "스트라이프 셔츠", "STRIPE SHIRT", "봄·여름", "light-blue white navy", ["무늬가 있으니 하의는 단색으로 정리해요.", "블루 스트라이프 + 베이지 팬츠가 산뜻해요."], "스트라이프셔츠 줄무늬셔츠", "regular semi-over over"],
+    ["linen-shirt", "린넨 셔츠", "LINEN SHIRT", "여름", "white beige khaki", ["통기성이 좋아 여름 반팔 대신 많이 입어요.", "단추를 열어 반팔 위에 걸치면 아우터처럼 입을 수 있어요."], "린넨셔츠 마셔츠", "regular over"],
+    ["flannel-shirt", "체크 셔츠", "FLANNEL CHECK SHIRT", "가을·겨울", "burgundy navy khaki", ["열어서 반팔·후드티 위에 걸치면 아우터처럼 쓸 수 있어요.", "체크 색 중 하나를 하의 색으로 맞추면 통일감이 생겨요."], "체크셔츠 플란넬 남방", "regular over"],
+    ["denim-shirt", "데님 셔츠", "DENIM SHIRT", "봄·가을", "light-blue mid-blue", ["하의는 블랙·베이지로 톤을 나눠 입어요.", "화이트 티 위에 셔켓처럼 열어 입어도 좋아요."], "청남방 데님셔츠", "regular over"],
+    ["polo-shirt", "폴로 셔츠", "POLO SHIRT", "여름", "navy white black", ["칼라가 있어 반팔 티보다 단정해 보여요.", "슬랙스·치노와 입으면 깔끔한 여름 출근룩이 돼요."], "피케 카라티 폴로", "slim regular over"],
+    ["rugby-shirt", "럭비 셔츠", "RUGBY SHIRT", "봄·가을", "navy burgundy", ["굵은 줄무늬가 포인트라 하의는 단색이 좋아요.", "데님과 입으면 캐주얼한 빈티지 무드가 나요."], "럭비티 카라맨투맨", "regular over"],
+    ["blouse", "블라우스", "BLOUSE", "봄·여름", "white ivory pink", ["슬랙스·스커트와 입으면 단정한 오피스룩이 돼요.", "데님과 입으면 꾸민 듯 편한 데일리룩이 돼요."], "블라우스", "crop regular over"],
   ]),
   ...build("inner", [
     ["sleeveless", "슬리브리스", "SLEEVELESS TOP", "여름", "white black gray", ["셔츠나 가디건 안에 받쳐 입는 레이어드용으로 좋아요.", "와이드 팬츠와 단독으로 입으면 시원한 여름 코디가 돼요."], "나시 민소매 슬리브리스 탱크탑"],
-    ["turtleneck", "터틀넥", "TURTLENECK", "가을·겨울", "black ivory gray navy", ["코트·블레이저 안에 입으면 셔츠보다 부드러운 인상이 돼요.", "블랙 터틀넥은 어떤 아우터와도 잘 맞아요."], "터틀넥 폴라 목폴라"],
+    ["turtleneck", "터틀넥", "TURTLENECK", "가을·겨울", "black ivory gray navy", ["코트·블레이저 안에 입으면 셔츠보다 부드러운 인상이 돼요.", "블랙 터틀넥은 어떤 아우터와도 잘 맞아요."], "터틀넥 폴라 목폴라", "slim regular"],
     ["thermal", "발열 내의", "THERMAL INNER", "겨울", "black white gray", ["두께가 얇아 셔츠·니트 안에 입어도 티가 안 나요.", "흰 셔츠 안에는 베이지 계열이 비치지 않아 좋아요."], "히트텍 발열내의 내복"],
     ["henley", "헨리넥", "HENLEY TEE", "봄·가을", "white gray navy", ["단추 몇 개만 있는 넥라인이라 단독으로 입어도 멋스러워요.", "셔츠나 가디건 안에 레이어드해도 좋아요."], "헨리넥 단추티"],
     ["camisole", "캐미솔", "CAMISOLE", "여름", "black white beige", ["셔츠·가디건 안에 입으면 은은한 레이어드가 돼요.", "슬립 원피스 대신 스커트와 맞춰 입어도 좋아요."], "캐미솔 슬립탑"],
   ]),
   ...build("bottom", [
-    ["wide", "와이드 데님", "WIDE LEG DENIM", "사계절", "indigo mid-blue black light-blue", ["상의는 짧거나 넣어 입어 허리 위치를 보여 주면 비율이 좋아요.", "로퍼·스니커즈처럼 앞코가 둥근 신발이 잘 어울려요."], "데님 청바지 진 와이드 jeans denim"],
-    ["straight", "스트레이트 데님", "STRAIGHT DENIM", "사계절", "mid-blue indigo black light-blue", ["가장 무난한 핏이라 어떤 상의와도 잘 맞아요.", "블레이저와 입으면 오피스 캐주얼이 돼요."], "데님 청바지 진 스트레이트 jeans denim"],
-    ["relaxed", "릴랙스 데님", "RELAXED DENIM", "사계절", "light-blue mid-blue gray", ["여유 있는 핏이라 크롭 아우터와 입으면 비율이 좋아요.", "스니커즈와 입으면 편한 스트릿 무드가 나요."], "데님 청바지 진 릴랙스 jeans denim"],
-    ["bootcut", "부츠컷 데님", "BOOTCUT DENIM", "사계절", "indigo black mid-blue", ["밑단이 넓어서 굽 있는 부츠나 로퍼로 길이를 살려요.", "상의는 짧게 입어야 다리가 길어 보여요."], "부츠컷 세미부츠컷 데님 청바지"],
-    ["skinny", "스키니 데님", "SKINNY DENIM", "사계절", "black indigo", ["오버핏 상의·롱 아우터와 입으면 균형이 맞아요.", "첼시 부츠와 함께 입으면 깔끔해요."], "스키니 슬림 데님 청바지"],
-    ["slacks", "슬랙스", "SLACKS", "사계절", "charcoal black gray beige", ["셔츠·니트와 입으면 단정하고, 후드티와 입으면 편안해요.", "로퍼·더비와 입으면 포멀, 스니커즈와 입으면 캐주얼이에요."], "슬랙스 정장바지 울팬츠"],
-    ["chinos", "치노 팬츠", "CHINO PANTS", "봄·여름·가을", "beige khaki navy", ["베이지 치노 + 네이비 상의가 대표적인 조합이에요.", "셔츠·폴로와 입으면 깔끔한 캐주얼이 돼요."], "치노 면바지"],
-    ["cargo", "카고 팬츠", "CARGO PANTS", "사계절", "khaki black beige", ["옆 주머니가 포인트라 상의는 심플하게 입어요.", "짧은 아우터·스니커즈와 입으면 스트릿 무드가 나요."], "카고 건빵바지"],
+    ["denim", "데님 팬츠", "DENIM PANTS", "사계절", "indigo mid-blue black light-blue", ["핏마다 어울리는 상의가 달라요. 와이드·릴랙스는 상의를 짧게, 스키니·슬림은 상의를 길고 넉넉하게 입으면 비율이 좋아요.", "인디고는 단정하게, 라이트 블루는 캐주얼하게, 블랙은 시크하게 떨어져요."], "데님 청바지 진 jeans denim 와이드데님 스트레이트데님 스키니진 부츠컷 일자청바지 플레어진 배럴진", "skinny slim straight tapered wide relaxed bootcut flare curved"],
+    ["slacks", "슬랙스", "SLACKS", "사계절", "charcoal black gray beige", ["셔츠·니트와 입으면 단정하고, 후드티와 입으면 편안해요.", "로퍼·더비와 입으면 포멀, 스니커즈와 입으면 캐주얼이에요."], "슬랙스 정장바지 울팬츠", "slim straight tapered wide bootcut"],
+    ["cotton-pants", "코튼 팬츠", "COTTON PANTS", "봄·여름·가을", "beige khaki ivory navy black", ["데님보다 부드러운 인상이라 셔츠·니트와 잘 어울려요.", "베이지·아이보리는 네이비·화이트 상의와, 블랙은 어떤 색과도 무난해요."], "코튼팬츠 면바지 치노 치노팬츠 코튼", "slim straight tapered wide relaxed curved"],
+    ["cargo", "카고 팬츠", "CARGO PANTS", "사계절", "khaki black beige", ["옆 주머니가 포인트라 상의는 심플하게 입어요.", "짧은 아우터·스니커즈와 입으면 스트릿 무드가 나요."], "카고 건빵바지", "straight tapered wide relaxed"],
     ["jogger", "조거 팬츠", "JOGGER PANTS", "사계절", "gray black navy", ["밑단이 조여 있어 운동화가 잘 보여요.", "후드티·바람막이와 입으면 편한 애슬레저룩이 돼요."], "조거 츄리닝"],
-    ["track-pants", "트랙 팬츠", "TRACK PANTS", "사계절", "black navy", ["옆 라인이 포인트라 상의는 단색이 좋아요.", "블레이저와 섞어 입으면 요즘 유행하는 믹스매치가 돼요."], "트랙팬츠 트레이닝바지 저지"],
+    ["track-pants", "트랙 팬츠", "TRACK PANTS", "사계절", "black navy", ["옆 라인이 포인트라 상의는 단색이 좋아요.", "블레이저와 섞어 입으면 요즘 유행하는 믹스매치가 돼요."], "트랙팬츠 트레이닝바지 저지", "straight wide"],
     ["shorts", "반바지", "SHORTS", "여름", "beige black navy khaki", ["무릎 위 기장이면 시원하고, 버뮤다 기장이면 단정해요.", "반팔 셔츠·폴로와 입으면 여름 정석 코디예요."], "반바지 쇼츠 버뮤다"],
-    ["corduroy", "코듀로이 팬츠", "CORDUROY PANTS", "가을·겨울", "brown beige ivory", ["골지 질감이 따뜻해 보여 니트와 잘 어울려요.", "브라운 코듀로이 + 아이보리 니트가 대표 조합이에요."], "코듀로이 골덴"],
+    ["corduroy", "코듀로이 팬츠", "CORDUROY PANTS", "가을·겨울", "brown beige ivory", ["골지 질감이 따뜻해 보여 니트와 잘 어울려요.", "브라운 코듀로이 + 아이보리 니트가 대표 조합이에요."], "코듀로이 골덴", "straight wide relaxed"],
     ["mini-skirt", "미니 스커트", "MINI SKIRT", "봄·여름", "black indigo beige", ["상의는 여유 있는 니트·셔츠로 균형을 맞춰요.", "롱부츠·로퍼와 함께 입으면 단정해요."], "미니스커트 숏스커트 치마"],
     ["long-skirt", "롱 스커트", "LONG SKIRT", "사계절", "black beige indigo", ["상의는 짧게 넣어 입어 허리선을 살려요.", "스니커즈와 입으면 캐주얼, 부츠와 입으면 분위기 있어요."], "롱스커트 맥시스커트 치마"],
     ["pleated-skirt", "플리츠 스커트", "PLEATED SKIRT", "봄·가을", "gray navy black", ["니트·셔츠와 입으면 단정한 프레피 스타일이 돼요.", "로퍼·메리제인과 잘 어울려요."], "플리츠 주름치마"],
@@ -163,7 +167,28 @@ export const items: Item[] = [
   ]),
 ];
 
-export const itemById = (id: string | null | undefined) => (id ? items.find(i => i.id === id) : undefined);
+/** 합쳐진 예전 아이템 id → 지금 아이템 + 핏 (예전 링크·저장된 데이터가 깨지지 않게) */
+export const legacyItems: Record<string, { id: string; fit?: string }> = {
+  wide: { id: "denim", fit: "wide" }, straight: { id: "denim", fit: "straight" }, relaxed: { id: "denim", fit: "relaxed" },
+  bootcut: { id: "denim", fit: "bootcut" }, skinny: { id: "denim", fit: "skinny" },
+  chinos: { id: "cotton-pants", fit: "straight" }, "crop-tee": { id: "short-tee", fit: "crop" },
+};
+
+export const itemById = (id: string | null | undefined) => {
+  if (!id) return undefined;
+  const real = legacyItems[id]?.id ?? id;
+  return items.find(i => i.id === real);
+};
+
+/** 이 아이템의 핏별 도식 그림 */
+export const fitImage = (item: Item, fit: string | undefined, colorId?: string) =>
+  flatImage(item.id, colorById(colorId ?? item.colors[0])?.hex ?? "#9A9A9A", fit) ?? item.image;
+
+/** AI 피팅에 보낼 실제 사진 (핏이 맞는 사진, 없으면 아무 사진) */
+export function photoFor(item: Item, fit: string | undefined) {
+  if (!item.photos) return undefined;
+  return (fit && item.photos[fit]) || Object.values(item.photos)[0];
+}
 export const categoryOf = (id: CategoryId) => categories.find(c => c.id === id)!;
 export const slotOf = (item: Item): Slot => categoryOf(item.category).slot;
 

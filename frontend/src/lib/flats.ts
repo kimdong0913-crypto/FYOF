@@ -155,12 +155,42 @@ function accFlat(c: Ink, kind: AccKind) {
   }
 }
 
+// ---------- 핏 → 실루엣 ----------
+/** 상의·아우터 핏: 몸판 폭(hw)과 기장(bottom)을 바꾼다 */
+function fitTop(o: TopOpts, fit: string | undefined): TopOpts {
+  const top = o.top ?? 120, bottom = o.bottom ?? 390, hw = o.hw ?? 78;
+  switch (fit) {
+    case "crop": return { ...o, bottom: top + Math.min(bottom - top, 170), ...(o.quilt ? { quilt: Math.min(o.quilt, 3) } : {}) };
+    case "slim": return { ...o, hw: hw - 10 };
+    case "semi-over": return { ...o, hw: hw + 6, bottom: bottom + 10 };
+    case "over": return { ...o, hw: hw + 14, bottom: Math.min(bottom + 22, 470) };
+    case "boxy": return { ...o, hw: hw + 16, bottom: top + Math.min(bottom - top, 220) };
+    case "long": return { ...o, bottom: 470, flare: (o.flare ?? 0) + 8, ...(o.quilt ? { quilt: o.quilt + 2 } : {}) };
+    default: return o;
+  }
+}
+
+/** 바지 핏: 밑단 바깥/안쪽 폭과 무릎 폭 */
+const pantsFit: Record<string, { hemOut: number; hemIn: number; knee: number }> = {
+  skinny: { hemOut: 50, hemIn: 18, knee: 54 },
+  slim: { hemOut: 58, hemIn: 16, knee: 62 },
+  straight: { hemOut: 74, hemIn: 14, knee: 72 },
+  tapered: { hemOut: 56, hemIn: 16, knee: 76 },
+  wide: { hemOut: 96, hemIn: 6, knee: 84 },
+  relaxed: { hemOut: 86, hemIn: 10, knee: 86 },
+  bootcut: { hemOut: 84, hemIn: 12, knee: 62 },
+  flare: { hemOut: 106, hemIn: 6, knee: 58 },
+  curved: { hemOut: 64, hemIn: 16, knee: 94 },
+};
+
 // ---------- 아이템 → 그림 ----------
-type Spec = (c: Ink, trim: Ink) => string;
-const T = (o: TopOpts): Spec => c => topFlat(c, o);
+type Spec = (c: Ink, trim: Ink, fit?: string) => string;
+const T = (o: TopOpts): Spec => (c, _t, fit) => topFlat(c, fitTop(o, fit));
+const Pants = (extra: Partial<PantsOpts> = {}, fallback = "straight"): Spec => (c, _t, fit) =>
+  pantsFlat(c, { ...(pantsFit[fit ?? fallback] ?? pantsFit[fallback]!), ...extra });
 const specs: Record<string, Spec> = {
   // 아우터
-  mustang: (c, t) => topFlat(c, { neck: "lapel", top: 110, bottom: 400, hw: 84, open: true, buttons: 0, trim: t.fill, pockets: "flap", cuffs: true }),
+  mustang: (c, t, fit) => topFlat(c, fitTop({ neck: "lapel", top: 110, bottom: 400, hw: 84, open: true, buttons: 0, trim: t.fill, pockets: "flap", cuffs: true }, fit)),
   "light-padding": T({ neck: "crew", zip: "full", quilt: 6, hw: 80, bottom: 380 }),
   "long-padding": T({ neck: "high", zip: "full", quilt: 8, top: 100, bottom: 470, hw: 86, flare: 6 }),
   "short-padding": T({ neck: "high", zip: "full", quilt: 3, top: 120, bottom: 340, hw: 96, cuffs: true }),
@@ -194,7 +224,6 @@ const specs: Record<string, Spec> = {
   "polo-shirt": T({ neck: "collar", sleeve: "short", buttons: 2, hw: 78 }),
   "rugby-shirt": T({ neck: "collar", buttons: 2, stripes: true, cuffs: true, hw: 80 }),
   blouse: T({ neck: "v", sleeve: "long", buttons: 4, hw: 76, flare: 8, cuffs: true }),
-  "crop-tee": T({ sleeve: "short", neck: "crew", hw: 78, bottom: 290 }),
   // 이너
   sleeveless: T({ sleeve: "none", neck: "deep", hw: 66 }),
   turtleneck: T({ neck: "high", hw: 72, cuffs: true }),
@@ -202,18 +231,14 @@ const specs: Record<string, Spec> = {
   henley: T({ neck: "crew", buttons: 3, hw: 72, bottom: 380 }),
   camisole: T({ sleeve: "none", neck: "v", hw: 62, flare: 6 }),
   // 하의
-  wide: c => pantsFlat(c, { hemOut: 96, hemIn: 6, knee: 84, denim: true }),
-  straight: c => pantsFlat(c, { hemOut: 74, hemIn: 14, knee: 72, denim: true }),
-  relaxed: c => pantsFlat(c, { hemOut: 86, hemIn: 10, knee: 84, denim: true }),
-  bootcut: c => pantsFlat(c, { hemOut: 84, hemIn: 12, knee: 62, denim: true }),
-  skinny: c => pantsFlat(c, { hemOut: 52, hemIn: 18, knee: 56, denim: true }),
-  slacks: c => pantsFlat(c, { hemOut: 76, hemIn: 12, knee: 72, crease: true, pleat: true }),
-  chinos: c => pantsFlat(c, { hemOut: 70, hemIn: 14, knee: 68, cuff: true }),
-  cargo: c => pantsFlat(c, { hemOut: 84, hemIn: 10, knee: 82, cargo: true }),
+  denim: Pants({ denim: true }),
+  slacks: Pants({ crease: true, pleat: true }),
+  "cotton-pants": Pants({ cuff: true }),
+  cargo: Pants({ cargo: true }, "wide"),
   jogger: c => pantsFlat(c, { hemOut: 50, hemIn: 18, knee: 70, cuff: true }),
-  "track-pants": c => pantsFlat(c, { hemOut: 74, hemIn: 12, knee: 72, stripe: true }),
+  "track-pants": Pants({ stripe: true }),
   shorts: c => pantsFlat(c, { hemOut: 92, hemIn: 20, knee: 88, length: 270 }),
-  corduroy: c => pantsFlat(c, { hemOut: 76, hemIn: 12, knee: 74, cord: true }),
+  corduroy: Pants({ cord: true }),
   "mini-skirt": c => skirtFlat(c, { length: 170, flare: 22 }),
   "long-skirt": c => skirtFlat(c, { length: 340, flare: 50 }),
   "pleated-skirt": c => skirtFlat(c, { length: 250, flare: 44, pleats: true }),
@@ -228,10 +253,10 @@ const specs: Record<string, Spec> = {
   "cross-bag": c => accFlat(c, "cross"), backpack: c => accFlat(c, "backpack"), glasses: c => accFlat(c, "glasses"),
 };
 
-/** 아이템 도식을 data URI 로. 없는 아이템이면 undefined. trimHex: 무스탕 칼라처럼 다른 색이 들어가는 부분 */
-export function flatImage(id: string, hex: string, trimHex = "#E9E2D0"): string | undefined {
+/** 아이템 도식을 data URI 로. 없는 아이템이면 undefined. fit: 핏(실루엣), trimHex: 무스탕 칼라처럼 다른 색이 들어가는 부분 */
+export function flatImage(id: string, hex: string, fit?: string, trimHex = "#E9E2D0"): string | undefined {
   const spec = specs[id];
   if (!spec) return undefined;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#ECEBE7"/><g transform="translate(0 6)">${spec(inks(hex), inks(trimHex))}</g></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#ECEBE7"/><g transform="translate(0 6)">${spec(inks(hex), inks(trimHex), fit)}</g></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

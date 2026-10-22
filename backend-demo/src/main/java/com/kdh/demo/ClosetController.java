@@ -198,6 +198,12 @@ public class ClosetController {
                       INDEX idx_user (user_id),
                       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""");
+            // 핏별로 나뉘어 있던 아이템을 합친 뒤의 id 로 옮긴다 (와이드 데님 -> 데님 팬츠). 이미 담긴 아이템과 겹치면 예전 것은 지운다.
+            for (String[] m : StyleVoteController.MERGED) {
+                jdbc.update("UPDATE IGNORE closet_items SET product_id = ? WHERE product_id = ?", m[1], m[0]);
+                jdbc.update("DELETE FROM closet_items WHERE product_id = ?", m[0]);
+                jdbc.update("UPDATE closet_fits SET product_id = ? WHERE product_id = ?", m[1], m[0]);
+            }
             schemaReady = true;
         }
     }

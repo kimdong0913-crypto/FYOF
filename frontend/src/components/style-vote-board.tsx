@@ -9,6 +9,7 @@ import { TierBadge } from "@/components/tier-badge";
 import { api, errorText, photoUrl } from "@/lib/api";
 import { shrinkImage } from "@/lib/image";
 import { colorsFirst, itemById, itemsForSlot, slots, type Item } from "@/lib/catalog";
+import { fitById } from "@/lib/fits";
 import { emptyOutfit, outfitTitle, slotForItem, type Outfit } from "@/lib/outfit";
 import { ages, colorById, genders, palette } from "@/lib/palette";
 import { useUser } from "@/lib/session";
@@ -52,14 +53,17 @@ function OutfitEditor({ outfit, onChange, lockSlot }: { outfit: Outfit; onChange
         <span>{s.ko}{s.required ? "" : " (선택)"}</span>
         <div className="select-wrap"><select aria-label={`${s.ko} 아이템`} value={piece.item} disabled={lockSlot === s.id} onChange={e => {
           const next = itemById(e.target.value);
-          onChange({ ...outfit, [s.id]: { item: e.target.value, color: next && !next.colors.includes(piece.color) ? next.colors[0] ?? "" : e.target.value ? piece.color : "" } });
+          onChange({ ...outfit, [s.id]: { item: e.target.value, color: next && !next.colors.includes(piece.color) ? next.colors[0] ?? "" : e.target.value ? piece.color : "", fit: next?.defaultFit ?? "" } });
         }}>
           <option value="">{s.required ? "아이템 고르기" : "없음"}</option>
           {itemsForSlot(s.id).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
         </select><ChevronDown size={14}/></div>
       </div>
+      {item && item.fits.length > 0 && <div className="fit-row" role="radiogroup" aria-label={`${s.ko} 핏`}>
+        {item.fits.map(f => <button type="button" role="radio" aria-checked={piece.fit === f} key={f} className={piece.fit === f ? "selected" : ""} title={fitById(f)?.desc} onClick={() => onChange({ ...outfit, [s.id]: { ...piece, fit: f } })}>{fitById(f)?.ko}</button>)}
+      </div>}
       {item && <div className="swatch-row" role="radiogroup" aria-label={`${s.ko} 색`}>
-        {colorsFirst(item, palette).map(c => <button type="button" role="radio" aria-checked={piece.color === c.id} key={c.id} title={c.ko} aria-label={c.ko} className={`${piece.color === c.id ? "selected" : ""} ${item.colors.includes(c.id) ? "" : "rare"}`} style={{ background: c.hex }} onClick={() => onChange({ ...outfit, [s.id]: { item: piece.item, color: c.id } })}/>)}
+        {colorsFirst(item, palette).map(c => <button type="button" role="radio" aria-checked={piece.color === c.id} key={c.id} title={c.ko} aria-label={c.ko} className={`${piece.color === c.id ? "selected" : ""} ${item.colors.includes(c.id) ? "" : "rare"}`} style={{ background: c.hex }} onClick={() => onChange({ ...outfit, [s.id]: { ...piece, color: c.id } })}/>)}
         <span className="swatch-name">{colorById(piece.color)?.ko ?? "색 고르기"}</span>
       </div>}
     </div>;
@@ -68,12 +72,12 @@ function OutfitEditor({ outfit, onChange, lockSlot }: { outfit: Outfit; onChange
 
 const missing = (o: Outfit) => slots.find(s => s.required && (!o[s.id].item || !o[s.id].color)) ?? slots.find(s => o[s.id].item && !o[s.id].color);
 
-export function StyleVoteBoard({ item, onChange }: { item: Item; onChange?: () => void }) {
+export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: string | undefined; onChange?: () => void }) {
   const user = useUser();
   const navigate = useNavigate();
   const location = useLocation();
   const goLogin = () => navigate({ to: "/login", search: { redirect: location.href } });
-  const startOutfit = useCallback(() => { const o = emptyOutfit(); o[slotForItem(item)] = { item: item.id, color: item.colors[0] ?? "" }; return o; }, [item]);
+  const startOutfit = useCallback(() => { const o = emptyOutfit(); o[slotForItem(item)] = { item: item.id, color: item.colors[0] ?? "", fit: fit ?? item.defaultFit ?? "" }; return o; }, [item, fit]);
 
   const [posts, setPosts] = useState<StylePost[]>([]);
   const [rankVersion, setRankVersion] = useState(0);

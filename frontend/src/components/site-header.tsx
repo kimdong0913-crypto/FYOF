@@ -14,7 +14,7 @@ export function SiteHeader() {
       <nav className="main-nav" aria-label="주 메뉴">
         <Link to="/" className={path === "/" ? "nav-active" : ""}>DISCOVER</Link>
         <Link to="/results" search={{ q: "전체" }} className={path === "/results" || path.startsWith("/item") ? "nav-active" : ""}>STYLE GUIDE</Link>
-        <Link to="/fitting" search={{ item: "wide" }} className={path === "/fitting" ? "nav-active" : ""}>VIRTUAL FIT</Link>
+        <Link to="/fitting" search={{ item: "denim", fit: "wide" }} className={path === "/fitting" ? "nav-active" : ""}>VIRTUAL FIT</Link>
         <Link to="/closet" className={path === "/closet" ? "nav-active" : ""}>MY CLOSET</Link>
       </nav>
       <div className="header-actions">
@@ -22,7 +22,7 @@ export function SiteHeader() {
         {user
           ? <div className="header-account"><Link to="/me" className="header-user" title="내 페이지"><User size={16}/> {user.nickname}</Link><button type="button" className="header-icon" aria-label="로그아웃" title="로그아웃" onClick={() => void logout()}><LogOut size={17} strokeWidth={1.7}/></button></div>
           : <Link to="/login" search={{ redirect: location.href }} className="header-user"><User size={16}/> 로그인</Link>}
-        <Button asChild variant="outline" className="header-fit"><Link to="/fitting" search={{ item: "wide" }}><ScanFace size={16}/> TRY ON <ArrowUpRight size={15}/></Link></Button>
+        <Button asChild variant="outline" className="header-fit"><Link to="/fitting" search={{ item: "denim", fit: "wide" }}><ScanFace size={16}/> TRY ON <ArrowUpRight size={15}/></Link></Button>
       </div>
     </div>
   </header>;

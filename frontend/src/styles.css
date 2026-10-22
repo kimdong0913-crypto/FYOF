@@ -436,3 +436,23 @@ button.header-icon { background: none; border: 0; cursor: pointer; color: inheri
 .tag-remove { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--border); background: var(--background); cursor: pointer; color: var(--muted-foreground); }
 .tag-add-list { justify-self: start; border: 1px dashed var(--border); background: none; padding: 6px 10px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 @media (max-width: 560px) { .tag-row { grid-template-columns: 20px minmax(0,1fr) 28px; } .tag-row input:nth-of-type(2) { grid-column: 2; } }
+/* --- 핏(실루엣) 옵션 --- */
+.guide-fits { display: flex; flex-direction: column; gap: 10px; margin: 22px 0 4px; }
+.guide-fits > span { font-size: 10px; font-weight: 800; color: var(--muted-foreground); }
+.guide-fits > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
+.guide-fits button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px 8px; border: 1px solid var(--border); background: var(--background); cursor: pointer; font: inherit; }
+.guide-fits button img { width: 100%; aspect-ratio: 4/5; object-fit: cover; }
+.guide-fits button strong { font-size: 11px; }
+.guide-fits button.selected { border-color: var(--foreground); box-shadow: inset 0 0 0 1px var(--foreground); }
+.guide-fits .fit-all { width: 100%; aspect-ratio: 4/5; display: grid; place-items: center; background: var(--surface-soft); font-size: 12px; font-weight: 900; letter-spacing: .08em; }
+.guide-fit-desc { font-size: 12px; color: var(--muted-foreground); margin: 0; }
+.fit-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.fit-row button { border: 1px solid var(--border); background: var(--background); padding: 4px 9px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.fit-row button.selected { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.insight-fits { margin-top: 30px; }
+.insight-fit-bars { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.insight-fit-bars button { position: relative; overflow: hidden; display: flex; align-items: baseline; gap: 8px; padding: 9px 14px; min-width: 96px; border: 1px solid var(--line-dark); background: transparent; color: var(--primary-foreground); font: inherit; cursor: pointer; }
+.insight-fit-bars button span { font-size: 12px; font-weight: 700; }
+.insight-fit-bars button strong { font-size: 16px; color: var(--highlight); margin-left: auto; }
+.insight-fit-bars button i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--highlight); }
+.insight-fit-bars button:hover, .insight-fit-bars button.active { background: var(--line-dark); border-color: var(--primary-foreground); }
