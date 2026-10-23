@@ -26,3 +26,4 @@ db.properties.*
 
 # 제미나이 앱에서 받은 원본 사진 (변환 후 frontend/src/assets/items 로 들어감)
 photos-inbox/
+tunnel-stop.log
