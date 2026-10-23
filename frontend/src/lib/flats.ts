@@ -13,12 +13,14 @@ function shade(hex: string, amount: number) {
   const f = (c: number) => Math.max(0, Math.min(255, Math.round(c + (amount < 0 ? c * amount : (255 - c) * amount))));
   return `#${[(n >> 16) & 255, (n >> 8) & 255, n & 255].map(f).map(v => v.toString(16).padStart(2, "0")).join("")}`;
 }
+const lum = (hex: string) => { const n = parseInt(hex.slice(1), 16); return ((n >> 16 & 255) * 299 + (n >> 8 & 255) * 587 + (n & 255) * 114) / 1000; };
 const isDark = (hex: string) => { const n = parseInt(hex.slice(1), 16); return ((n >> 16 & 255) * 299 + (n >> 8 & 255) * 587 + (n & 255) * 114) / 1000 < 90; };
 
 type Ink = { fill: string; edge: string; detail: string; inner: string };
 function inks(hex: string): Ink {
   const dark = isDark(hex);
-  return { fill: hex, edge: shade(hex, dark ? 0.35 : -0.45), detail: dark ? shade(hex, 0.3) : shade(hex, -0.3), inner: shade(hex, dark ? 0.15 : -0.12) };
+  const light = lum(hex) > 215; // 화이트·아이보리는 배경(#ECEBE7)과 비슷해서 선을 더 진하게
+  return { fill: hex, edge: shade(hex, dark ? 0.35 : light ? -0.6 : -0.45), detail: dark ? shade(hex, 0.3) : shade(hex, light ? -0.4 : -0.3), inner: shade(hex, dark ? 0.15 : -0.12) };
 }
 
 // ---------- 상의 / 아우터 ----------
@@ -30,6 +32,7 @@ type TopOpts = {
   zip?: "full" | "half" | "offset"; buttons?: number; pockets?: "patch" | "flap" | "kanga" | "chest" | "four";
   quilt?: number; belt?: boolean; ribs?: boolean; stripes?: boolean; trim?: string; flare?: number;
   sleeveStripe?: boolean;                                // 트랙 자켓 소매 옆줄
+  strap?: number;                                        // 민소매 어깨끈 폭
 };
 
 function topFlat(c: Ink, o: TopOpts) {
@@ -44,8 +47,12 @@ function topFlat(c: Ink, o: TopOpts) {
   const fill = `fill="${c.fill}" stroke="${c.edge}" stroke-width="3" stroke-linejoin="round"`;
   if (o.neck === "hood") parts.push(`<path d="M${CX - 46} ${top - 2} Q${CX - 58} ${top - 78} ${CX} ${top - 84} Q${CX + 58} ${top - 78} ${CX + 46} ${top - 2} Z" ${fill}/>`);
   if (sleeveL.length) { parts.push(`<path d="${poly(sleeveL)}" ${fill}/>`, `<path d="${poly(mirror(sleeveL))}" ${fill}/>`); }
-  if (sl === "none") { body.splice(1, 1, [CX - neckW - 16, top - 6], [CX - hw + 6, top + 30], [CX - hw, top + 70]); body.splice(6, 1, [CX + hw, top + 70], [CX + hw - 6, top + 30], [CX + neckW + 16, top - 6]); }
-  parts.push(`<path d="${poly(body)}" ${fill}/>`);
+  if (sl === "none") {
+    // 어깨끈 폭: 조끼(니트 베스트·패딩 베스트)는 넓게, 슬리브리스·캐미솔은 좁게
+    const strap = o.strap ?? 24;
+    const arm = top + 96;
+    parts.push(`<path d="M${CX - neckW} ${top - 12} L${CX - neckW - strap} ${top - 12} Q${CX - neckW - strap - 6} ${top + 70} ${CX - hw - 2} ${arm} L${CX - hw - 2 - flare} ${bottom} L${CX + hw + 2 + flare} ${bottom} L${CX + hw + 2} ${arm} Q${CX + neckW + strap + 6} ${top + 70} ${CX + neckW + strap} ${top - 12} L${CX + neckW} ${top - 12} Z" ${fill}/>`);
+  } else parts.push(`<path d="${poly(body)}" ${fill}/>`);
   const d: string[] = [];
   const det = `stroke="${c.detail}" stroke-width="2.5" fill="none" stroke-linecap="round"`;
   // 넥라인
@@ -63,7 +70,7 @@ function topFlat(c: Ink, o: TopOpts) {
   if (o.ribs || o.hem) d.push(line([CX - hw - flare, bottom - 18], [CX + hw + flare, bottom - 18]));
   if (o.cuffs && sl === "long") { d.push(`M${CX - hw - 60} ${bottom - 58} L${CX - hw - 27} ${bottom - 48}`, `M${W - (CX - hw - 60)} ${bottom - 58} L${W - (CX - hw - 27)} ${bottom - 48}`); }
   if (o.ribs) for (let x = CX - hw + 14; x < CX + hw; x += 16) d.push(line([x, bottom - 16], [x, bottom - 2]));
-  if (o.quilt) for (let i = 1; i <= o.quilt; i++) { const y = top + (bottom - top) * i / (o.quilt + 1); d.push(line([CX - hw - flare * i / (o.quilt + 1), y], [CX + hw + flare * i / (o.quilt + 1), y])); }
+  if (o.quilt) for (let i = 1; i <= o.quilt; i++) { const y = top + (bottom - top) * i / (o.quilt + 1); if (sl === "none" && y < top + 100) continue; d.push(line([CX - hw - flare * i / (o.quilt + 1), y], [CX + hw + flare * i / (o.quilt + 1), y])); }
   if (o.belt) parts.push(`<rect x="${CX - hw - flare / 2 - 2}" y="${top + (bottom - top) * 0.45}" width="${(hw + flare / 2 + 2) * 2}" height="16" fill="${c.inner}" stroke="${c.edge}" stroke-width="2.5"/>`);
   if (o.pockets === "kanga") d.push(`M${CX - 48} ${bottom - 30} L${CX - 38} ${bottom - 92} L${CX + 38} ${bottom - 92} L${CX + 48} ${bottom - 30}`);
   if (o.pockets === "patch" || o.pockets === "four") for (const s of [-1, 1]) d.push(`M${CX + s * 22} ${bottom - 95} h${s * 40} v44 h${-s * 40} Z`);
@@ -106,34 +113,71 @@ function skirtFlat(c: Ink, o: { length: number; flare: number; pleats?: boolean 
 
 // ---------- 신발 (옆모습) ----------
 type ShoeKind = "low" | "high" | "runner" | "loafer" | "derby" | "chelsea" | "worker" | "ugg" | "sandal" | "slide" | "maryjane";
+/** 위에서 본 샌들·슬리퍼: 발판 + 끈 */
+function topDownShoe(c: Ink, kind: "sandal" | "slide") {
+  const bed = shade(c.fill, isDark(c.fill) ? 0.55 : -0.25);
+  const edge = `stroke="${c.edge}" stroke-width="3" stroke-linejoin="round"`;
+  const footbed = `<path d="M200 96 C252 96 266 160 262 214 C258 266 250 300 252 344 C254 392 230 414 200 414 C170 414 146 392 148 344 C150 300 142 266 138 214 C134 160 148 96 200 96 Z" fill="${bed}" ${edge}/>`
+    + `<path d="M200 112 C240 112 250 166 246 214 C243 262 236 298 238 342 C240 382 222 398 200 398 C178 398 160 382 162 342 C164 298 157 262 154 214 C150 166 160 112 200 112 Z" fill="none" stroke="${c.edge}" stroke-width="1.5" stroke-dasharray="5 5" opacity=".6"/>`;
+  if (kind === "slide") {
+    return footbed + `<path d="M130 176 Q200 148 270 176 L272 262 Q200 240 128 262 Z" fill="${c.fill}" ${edge}/><path d="M146 206 Q200 188 254 206" stroke="${c.detail}" stroke-width="2.5" fill="none"/>`;
+  }
+  const band = (d: string) => `<path d="${d}" stroke="${c.edge}" stroke-width="30" fill="none" stroke-linecap="round"/><path d="${d}" stroke="${c.fill}" stroke-width="24" fill="none" stroke-linecap="round"/>`;
+  return footbed + band("M146 168 L254 236") + band("M254 168 L146 236") + band("M144 318 Q200 286 256 318")
+    + `<rect x="246" y="306" width="18" height="22" rx="3" fill="none" stroke="${c.detail}" stroke-width="3"/>`;
+}
+
+/** 옆에서 본 로퍼·메리제인: 낮은 발목선, 블록 굽 */
+function lowShoe(c: Ink, kind: "loafer" | "maryjane") {
+  const sole = shade(c.fill, isDark(c.fill) ? -0.4 : -0.55);
+  const edge = `stroke="${c.edge}" stroke-width="3" stroke-linejoin="round"`;
+  const det = `stroke="${c.detail}" stroke-width="2.5" fill="none" stroke-linecap="round"`;
+  const lining = shade(c.fill, isDark(c.fill) ? -0.5 : -0.35);
+  if (kind === "loafer") {
+    return `<path d="M72 322 L66 262 Q68 244 92 244 Q130 246 172 264 Q236 232 300 260 Q346 282 348 308 Q350 324 334 324 Z" fill="${c.fill}" ${edge}/>`
+      + `<path d="M80 252 Q120 250 168 266 Q120 262 82 264 Z" fill="${lining}"/>`
+      + `<path d="M196 258 Q250 236 306 266" ${det}/><path d="M186 270 Q240 252 296 276 L292 290 Q240 268 190 286 Z" fill="${shade(c.fill, isDark(c.fill) ? 0.12 : -0.1)}" ${edge}/>`
+      + `<path d="M232 272 l10 -4 l10 4 l-10 4 Z" fill="${lining}"/>`
+      + `<path d="M64 322 L352 322 Q356 334 344 336 L64 336 Z" fill="${sole}" ${edge}/><rect x="64" y="322" width="54" height="22" fill="${sole}" ${edge}/>`;
+  }
+  return `<path d="M72 322 L68 262 Q70 246 92 248 Q150 256 196 288 Q246 262 300 270 Q348 280 350 310 Q350 324 334 324 Z" fill="${c.fill}" ${edge}/>`
+    + `<path d="M80 256 Q140 262 194 290 Q140 274 82 270 Z" fill="${lining}"/>`
+    + `<path d="M138 262 Q176 244 214 286" stroke="${c.edge}" stroke-width="16" fill="none" stroke-linecap="round"/><path d="M138 262 Q176 244 214 286" stroke="${c.fill}" stroke-width="10" fill="none" stroke-linecap="round"/>`
+    + `<rect x="200" y="272" width="16" height="16" rx="2" fill="none" stroke="${c.detail}" stroke-width="3"/>`
+    + `<path d="M64 322 L352 322 Q356 334 344 336 L64 336 Z" fill="${sole}" ${edge}/><rect x="64" y="322" width="50" height="26" fill="${sole}" ${edge}/>`;
+}
+
 function shoeFlat(c: Ink, kind: ShoeKind) {
-  const sole = kind === "worker" || kind === "runner" ? 26 : kind === "loafer" || kind === "derby" || kind === "chelsea" || kind === "maryjane" ? 14 : 20;
-  const solid = kind === "low" || kind === "high" ? "#F1F0EC" : kind === "runner" ? "#E4E4E2" : shade(c.fill, isDark(c.fill) ? -0.4 : -0.55);
+  if (kind === "sandal" || kind === "slide") return topDownShoe(c, kind);
+  if (kind === "loafer" || kind === "maryjane") return `<g transform="translate(-60 -125) scale(1.3)">${lowShoe(c, kind)}</g>`;
+  const k: string = kind; // 위에서 처리한 종류를 빼고 남은 분기
+  const sole = k === "worker" || k === "runner" ? 26 : k === "loafer" || k === "derby" || k === "chelsea" || k === "maryjane" ? 14 : 20;
+  const solid = k === "low" || k === "high" ? "#F1F0EC" : k === "runner" ? "#E4E4E2" : shade(c.fill, isDark(c.fill) ? -0.4 : -0.55);
   const baseY = 330, toe = 330, heel = 70;
-  const shaft = kind === "high" ? 150 : kind === "chelsea" ? 150 : kind === "worker" ? 160 : kind === "ugg" ? 170 : 0;
+  const shaft = k === "high" ? 150 : k === "chelsea" ? 150 : k === "worker" ? 160 : k === "ugg" ? 170 : 0;
   const det = `stroke="${c.detail}" stroke-width="2.5" fill="none" stroke-linecap="round"`;
   let upper: string;
   const d: string[] = [];
-  if (kind === "sandal" || kind === "slide") {
-    upper = kind === "slide" ? `M140 ${baseY - 6} Q200 ${baseY - 70} 300 ${baseY - 16} L300 ${baseY - 6} Z` : `M120 ${baseY - 6} Q150 ${baseY - 60} 190 ${baseY - 50} L190 ${baseY - 6} Z M220 ${baseY - 6} Q260 ${baseY - 66} 310 ${baseY - 12} L310 ${baseY - 6} Z`;
+  if (k === "sandal" || k === "slide") {
+    upper = k === "slide" ? `M140 ${baseY - 6} Q200 ${baseY - 70} 300 ${baseY - 16} L300 ${baseY - 6} Z` : `M120 ${baseY - 6} Q150 ${baseY - 60} 190 ${baseY - 50} L190 ${baseY - 6} Z M220 ${baseY - 6} Q260 ${baseY - 66} 310 ${baseY - 12} L310 ${baseY - 6} Z`;
   } else {
-    const top = baseY - (kind === "loafer" || kind === "maryjane" ? 96 : 116) - shaft;
-    const instep = baseY - (kind === "loafer" || kind === "maryjane" ? 92 : 108);
+    const top = baseY - (k === "loafer" || k === "maryjane" ? 96 : 116) - shaft;
+    const instep = baseY - (k === "loafer" || k === "maryjane" ? 92 : 108);
     upper = `M${heel} ${baseY - 6} L${heel - 6} ${top + 16} Q${heel - 4} ${top} ${heel + 20} ${top} Q${heel + 50} ${top + 2} ${heel + (shaft ? 88 : 80)} ${shaft ? top : top + 22} ${shaft ? `L${heel + 96} ${instep}` : ""} Q${heel + 150} ${instep - 6} ${toe - 50} ${baseY - 70} Q${toe + 6} ${baseY - 56} ${toe + 14} ${baseY - 24} Q${toe + 16} ${baseY - 8} ${toe + 6} ${baseY - 6} Z`;
-    if (!shaft && kind !== "loafer" && kind !== "maryjane") d.push(`M${heel + 6} ${top + 8} Q${heel + 40} ${top + 30} ${heel + 78} ${top + 22}`);
-    if (kind === "low" || kind === "high" || kind === "runner") d.push(`M${toe - 54} ${baseY - 8} Q${toe - 46} ${baseY - 56} ${toe + 8} ${baseY - 40}`);
-    if (kind === "low" || kind === "high" || kind === "runner") d.push(`M${heel + 104} ${instep + 6} l16 -10 M${heel + 124} ${instep + 10} l16 -10 M${heel + 144} ${instep + 16} l16 -10`);
-    if (kind === "runner") d.push(`M${heel + 30} ${baseY - 30} Q${heel + 120} ${baseY - 70} ${toe - 20} ${baseY - 30}`);
-    if (kind === "loafer") d.push(`M${heel + 120} ${instep + 4} Q${toe - 40} ${baseY - 96} ${toe - 6} ${baseY - 50}`, `M${heel + 136} ${instep + 18} h56`);
-    if (kind === "derby") d.push(`M${heel + 96} ${instep - 2} L${heel + 170} ${baseY - 66}`, `M${heel + 50} ${baseY - 40} Q${heel + 110} ${baseY - 62} ${heel + 170} ${baseY - 66}`, `M${heel + 108} ${instep + 4} l14 -8 M${heel + 128} ${instep + 10} l14 -8`);
-    if (kind === "chelsea") d.push(`M${heel + 40} ${baseY - 84 - shaft + 10} L${heel + 50} ${baseY - 90}`, `M${heel + 70} ${baseY - 84 - shaft + 10} L${heel + 70} ${baseY - 90}`);
-    if (kind === "worker") for (let y = baseY - 100 - shaft + 30; y < baseY - 80; y += 24) d.push(`M${heel + 76} ${y} l22 8`);
-    if (kind === "ugg") d.push(`M${heel - 4} ${baseY - 84 - shaft + 14} Q${heel + 40} ${baseY - 84 - shaft + 26} ${heel + 80} ${baseY - 84 - shaft + 14}`);
-    if (kind === "maryjane") d.push(`M${heel + 60} ${top + 24} Q${heel + 100} ${top - 6} ${heel + 140} ${instep + 14}`);
+    if (!shaft && k !== "loafer" && k !== "maryjane") d.push(`M${heel + 6} ${top + 8} Q${heel + 40} ${top + 30} ${heel + 78} ${top + 22}`);
+    if (k === "low" || k === "high" || k === "runner") d.push(`M${toe - 54} ${baseY - 8} Q${toe - 46} ${baseY - 56} ${toe + 8} ${baseY - 40}`);
+    if (k === "low" || k === "high" || k === "runner") d.push(`M${heel + 104} ${instep + 6} l16 -10 M${heel + 124} ${instep + 10} l16 -10 M${heel + 144} ${instep + 16} l16 -10`);
+    if (k === "runner") d.push(`M${heel + 30} ${baseY - 30} Q${heel + 120} ${baseY - 70} ${toe - 20} ${baseY - 30}`);
+    if (k === "loafer") d.push(`M${heel + 120} ${instep + 4} Q${toe - 40} ${baseY - 96} ${toe - 6} ${baseY - 50}`, `M${heel + 136} ${instep + 18} h56`);
+    if (k === "derby") d.push(`M${heel + 96} ${instep - 2} L${heel + 170} ${baseY - 66}`, `M${heel + 50} ${baseY - 40} Q${heel + 110} ${baseY - 62} ${heel + 170} ${baseY - 66}`, `M${heel + 108} ${instep + 4} l14 -8 M${heel + 128} ${instep + 10} l14 -8`);
+    if (k === "chelsea") d.push(`M${heel + 40} ${baseY - 84 - shaft + 10} L${heel + 50} ${baseY - 90}`, `M${heel + 70} ${baseY - 84 - shaft + 10} L${heel + 70} ${baseY - 90}`);
+    if (k === "worker") for (let y = baseY - 100 - shaft + 30; y < baseY - 80; y += 24) d.push(`M${heel + 76} ${y} l22 8`);
+    if (k === "ugg") d.push(`M${heel - 4} ${baseY - 84 - shaft + 14} Q${heel + 40} ${baseY - 84 - shaft + 26} ${heel + 80} ${baseY - 84 - shaft + 14}`);
+    if (k === "maryjane") d.push(`M${heel + 60} ${top + 24} Q${heel + 100} ${top - 6} ${heel + 140} ${instep + 14}`);
   }
-  const soleEl = kind === "slide" || kind === "sandal" ? `<rect x="${kind === "slide" ? 120 : 100}" y="${baseY - 6}" width="${kind === "slide" ? 200 : 230}" height="16" rx="6" fill="${solid}" stroke="${c.edge}" stroke-width="3"/>`
+  const soleEl = k === "slide" || k === "sandal" ? `<rect x="${k === "slide" ? 120 : 100}" y="${baseY - 6}" width="${k === "slide" ? 200 : 230}" height="16" rx="6" fill="${solid}" stroke="${c.edge}" stroke-width="3"/>`
     : `<path d="M${heel - 6} ${baseY - 8} L${toe + 14} ${baseY - 8} Q${toe + 22} ${baseY + sole / 2} ${toe + 6} ${baseY + sole} L${heel - 2} ${baseY + sole} Z" fill="${solid}" stroke="${c.edge}" stroke-width="3" stroke-linejoin="round"/>`;
-  const strap = kind === "sandal" ? `<path d="M110 ${baseY - 30} q-10 -30 20 -34" ${det}/>` : "";
+  const strap = k === "sandal" ? `<path d="M110 ${baseY - 30} q-10 -30 20 -34" ${det}/>` : "";
   return `<g transform="translate(-34 -40) scale(1.16)"><path d="${upper}" fill="${c.fill}" stroke="${c.edge}" stroke-width="3" stroke-linejoin="round"/>${soleEl}${strap}${d.length ? `<path d="${d.join(" ")}" ${det}/>` : ""}</g>`;
 }
 
@@ -194,7 +238,7 @@ const specs: Record<string, Spec> = {
   "light-padding": T({ neck: "crew", zip: "full", quilt: 6, hw: 80, bottom: 380 }),
   "long-padding": T({ neck: "high", zip: "full", quilt: 8, top: 100, bottom: 470, hw: 86, flare: 6 }),
   "short-padding": T({ neck: "high", zip: "full", quilt: 3, top: 120, bottom: 340, hw: 96, cuffs: true }),
-  "padding-vest": T({ neck: "high", zip: "full", quilt: 4, sleeve: "none", hw: 80, bottom: 380 }),
+  "padding-vest": T({ neck: "high", zip: "full", quilt: 4, sleeve: "none", hw: 80, bottom: 380, strap: 30 }),
   "hood-zipup": T({ neck: "hood", zip: "full", pockets: "kanga", ribs: true, cuffs: true }),
   blazer: T({ neck: "lapel", buttons: 2, pockets: "flap", hw: 80, bottom: 400 }),
   "trench-coat": T({ neck: "lapel", belt: true, buttons: 0, top: 100, bottom: 470, hw: 84, flare: 14, open: true }),
@@ -215,7 +259,7 @@ const specs: Record<string, Spec> = {
   hoodie: T({ neck: "hood", pockets: "kanga", ribs: true, cuffs: true, hw: 82 }),
   "half-zip": T({ neck: "high", zip: "half", ribs: true, cuffs: true, hw: 80 }),
   "crew-knit": T({ neck: "crew", ribs: true, cuffs: true, hw: 80, stripes: false }),
-  "knit-vest": T({ neck: "v", sleeve: "none", ribs: true, hw: 74, bottom: 360 }),
+  "knit-vest": T({ neck: "v", sleeve: "none", ribs: true, hw: 74, bottom: 360, strap: 34 }),
   "oxford-shirt": T({ neck: "collar", buttons: 6, cuffs: true, hw: 76, bottom: 400 }),
   "stripe-shirt": T({ neck: "collar", buttons: 6, cuffs: true, hw: 76, bottom: 400, stripes: true }),
   "linen-shirt": T({ neck: "collar", buttons: 5, sleeve: "long", hw: 82, bottom: 395 }),
@@ -225,11 +269,11 @@ const specs: Record<string, Spec> = {
   "rugby-shirt": T({ neck: "collar", buttons: 2, stripes: true, cuffs: true, hw: 80 }),
   blouse: T({ neck: "v", sleeve: "long", buttons: 4, hw: 76, flare: 8, cuffs: true }),
   // 이너
-  sleeveless: T({ sleeve: "none", neck: "deep", hw: 66 }),
+  sleeveless: T({ sleeve: "none", neck: "deep", hw: 66, strap: 18 }),
   turtleneck: T({ neck: "high", hw: 72, cuffs: true }),
   thermal: T({ neck: "crew", hw: 68 }),
   henley: T({ neck: "crew", buttons: 3, hw: 72, bottom: 380 }),
-  camisole: T({ sleeve: "none", neck: "v", hw: 62, flare: 6 }),
+  camisole: T({ sleeve: "none", neck: "v", hw: 62, flare: 6, strap: 6 }),
   // 하의
   denim: Pants({ denim: true }),
   slacks: Pants({ crease: true, pleat: true }),
@@ -257,6 +301,6 @@ const specs: Record<string, Spec> = {
 export function flatImage(id: string, hex: string, fit?: string, trimHex = "#E9E2D0"): string | undefined {
   const spec = specs[id];
   if (!spec) return undefined;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#ECEBE7"/><g transform="translate(0 6)">${spec(inks(hex), inks(trimHex), fit)}</g></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280" viewBox="0 0 ${W} ${H}"><defs><filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="#000" flood-opacity=".13"/></filter></defs><rect width="${W}" height="${H}" fill="#ECEBE7"/><g transform="translate(0 6)" filter="url(#sh)">${spec(inks(hex), inks(trimHex), fit)}</g></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
