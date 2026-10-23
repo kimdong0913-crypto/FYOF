@@ -76,8 +76,14 @@ public class TryOnController {
             try {
                 job.image = callAi(personBytes, garmentBytes, category, garmentPhotoType);
                 job.status = Status.DONE;
+            } catch (java.net.ConnectException e) {
+                job.error = "AI 서버가 꺼져 있어요. AI 합성은 AI 서버를 켠 뒤(서버 배포 후)에 쓸 수 있어요.";
+                job.status = Status.FAILED;
             } catch (Exception e) {
-                job.error = e.getMessage();
+                // 연결 거부가 다른 예외에 감싸져 오는 경우도 있다
+                Throwable root = e; while (root.getCause() != null) root = root.getCause();
+                job.error = root instanceof java.net.ConnectException ? "AI 서버가 꺼져 있어요. AI 합성은 AI 서버를 켠 뒤(서버 배포 후)에 쓸 수 있어요."
+                        : e.getMessage() == null ? "AI 합성에 실패했어요." : e.getMessage();
                 job.status = Status.FAILED;
             }
         });
