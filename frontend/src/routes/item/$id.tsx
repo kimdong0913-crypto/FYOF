@@ -53,7 +53,7 @@ function ItemGuide() {
   return <><SiteHeader/><main className="product-page wrap">
     <div className="page-breadcrumb"><Link to="/results" search={{ q: category.ko }}>{category.en}</Link><span>/</span>{item.name}</div>
     <div className="product-layout">
-      <div className="detail-gallery detail-gallery-single"><div className="detail-primary"><img src={fitImage(item, shownFit)} alt={`${fitById(shownFit)?.ko ?? ""} ${item.name}`} width={1024} height={1280}/><span>{fitById(shownFit) ? `${fitById(shownFit)!.ko} 핏` : category.ko}</span></div></div>
+      <div className="detail-gallery detail-gallery-single"><div className="detail-primary"><img src={shownFit === item.defaultFit ? item.image : fitImage(item, shownFit)} alt={`${fitById(shownFit)?.ko ?? ""} ${item.name}`} width={1024} height={1280}/><span>{fitById(shownFit) ? `${fitById(shownFit)!.ko} 핏` : category.ko}</span></div>{item.aiPhoto && <p className="ai-note-line">아이템 이미지는 이해를 돕기 위해 AI로 만든 예시 이미지예요. 실제 옷과 색감이나 디테일이 다를 수 있어요.</p>}</div>
       <div className="detail-info">
         <Link to="/results" search={{ q: category.ko }} className="back-link"><ArrowLeft size={16}/> {category.ko} 전체 보기</Link>
         <span className="eyebrow">STYLE GUIDE / {category.en}</span>

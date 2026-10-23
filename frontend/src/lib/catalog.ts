@@ -2,7 +2,13 @@ import wide from "@/assets/look-wide.jpg";
 import straight from "@/assets/look-straight.jpg";
 import relaxed from "@/assets/look-relaxed.jpg";
 import denim from "@/assets/product-denim.jpg";
-import { flatImage } from "@/lib/flats";
+import { flatImage, type FlatStyle } from "@/lib/flats";
+
+/** 아이템 그림 스타일: "line"(얇은 선 스케치) / "color"(색 채운 그림) / "solid"(실루엣) */
+export const FLAT_STYLE: FlatStyle = "line";
+// 아이템 실사 사진 (제미나이로 만든 상품 사진, tools/import_inbox_photos.py 로 넣는다). 대표 색 + 기본 핏 모습이다.
+const itemPhotos = import.meta.glob<string>("../assets/items/*.jpg", { eager: true, import: "default" });
+const itemPhoto = (id: string) => itemPhotos[`../assets/items/${id}.jpg`];
 import { colorById, type PaletteColor } from "@/lib/palette";
 
 
@@ -41,7 +47,8 @@ export type Item = {
   aliases: string[];   // 검색어
   fits: string[];      // 고를 수 있는 핏 (fits.ts id). 핏이 없는 아이템은 []
   defaultFit?: string; // 처음 보여 줄 핏
-  image: string;       // 목록·가이드에 보이는 도식 그림 (기본 핏)
+  image: string;       // 목록·가이드에 보이는 이미지: 실사 사진, 없으면 도식 그림 (기본 핏)
+  aiPhoto: boolean;    // image 가 AI 로 만든 실사 사진인지 (화면에 "AI 생성 이미지" 표시)
   photos?: Record<string, { image: string; photoType: "flat-lay" | "model" }>; // 핏별 실제 사진 (AI 피팅용). 데님만 있음
   hasPhoto: boolean;
 };
@@ -75,8 +82,9 @@ function build(category: CategoryId, defs: Def[]): Item[] {
       ...(defaultFit ? { defaultFit } : {}),
       colors: colors.split(" "),
       aliases: aliases ? aliases.split(" ") : [],
-      // 대표 색 + 기본 핏으로 칠한 도식 그림 (flats.ts)
-      image: flatImage(id, colorById(colors.split(" ")[0])?.hex ?? "#9A9A9A", defaultFit) ?? placeholder(category, name),
+      // 실사 사진이 있으면 사진, 없으면 대표 색 + 기본 핏으로 칠한 도식 그림 (flats.ts)
+      image: itemPhoto(id) ?? flatImage(id, colorById(colors.split(" ")[0])?.hex ?? "#9A9A9A", defaultFit, undefined, FLAT_STYLE) ?? placeholder(category, name),
+      aiPhoto: Boolean(itemPhoto(id)),
       hasPhoto: Boolean(itemPhotos),
       ...(itemPhotos ? { photos: itemPhotos } : {}),
     };
@@ -182,7 +190,7 @@ export const itemById = (id: string | null | undefined) => {
 
 /** 이 아이템의 핏별 도식 그림 */
 export const fitImage = (item: Item, fit: string | undefined, colorId?: string) =>
-  flatImage(item.id, colorById(colorId ?? item.colors[0])?.hex ?? "#9A9A9A", fit) ?? item.image;
+  flatImage(item.id, colorById(colorId ?? item.colors[0])?.hex ?? "#9A9A9A", fit, undefined, FLAT_STYLE) ?? item.image;
 
 /** AI 피팅에 보낼 실제 사진 (핏이 맞는 사진, 없으면 아무 사진) */
 export function photoFor(item: Item, fit: string | undefined) {

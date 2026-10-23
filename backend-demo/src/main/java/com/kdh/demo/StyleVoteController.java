@@ -66,10 +66,13 @@ public class StyleVoteController {
 
     /** 신고가 이만큼 쌓이면 글을 숨긴다. */
     static final int REPORTS_TO_HIDE = 3;
-    /** 패셔니스타 뱃지: 추천을 10개 이상 받거나, 글 5개 이상 + 추천 3개 이상 (본인 추천은 제외). */
-    static final int BADGE_VOTES = 10;
-    static final int BADGE_ACTIVE_POSTS = 5;
-    static final int BADGE_ACTIVE_VOTES = 3;
+    /**
+     * 등급 기준 (글 수, 받은 추천 수) — 둘 다 채워야 올라간다. 본인이 누른 추천은 세지 않는다.
+     * 1 루키 / 2 스타일러 / 3 트렌드세터 / 4 패셔니스타 / 5 스타일 아이콘. 프론트 tier-badge.tsx 와 같게 유지.
+     */
+    static final int[][] TIERS = {{1, 0}, {10, 30}, {20, 100}, {35, 250}, {50, 500}};
+    /** 패셔니스타(4등급) 이상이면 뱃지 */
+    static final int BADGE_TIER = 4;
 
     /** 코디 한 칸: 아이템 id + 색 id + 핏 id(핏이 없는 아이템·칸은 ""). 비어 있으면 모두 "". */
     public record Piece(String item, String color, String fit) {
@@ -123,14 +126,16 @@ public class StyleVoteController {
             WHERE p2.hidden = 0 AND p2.author_id <> ''
             GROUP BY p2.author_id""";
 
-    private static final String BADGE_RULE = "(a.received >= " + BADGE_VOTES
-            + " OR (a.posts >= " + BADGE_ACTIVE_POSTS + " AND a.received >= " + BADGE_ACTIVE_VOTES + "))";
+    private static String reaches(int tier) {
+        return "(a.posts >= " + TIERS[tier - 1][0] + " AND a.received >= " + TIERS[tier - 1][1] + ")";
+    }
 
-    /** 등급: 3 패셔니스타 / 2 스타일러(글 3개 또는 추천 3개) / 1 루키(글 1개 이상) / 0 없음 */
-    static final int STYLER_POSTS = 3, STYLER_VOTES = 3;
-    private static final String TIER_RULE = "(CASE WHEN " + BADGE_RULE + " THEN 3"
-            + " WHEN a.posts >= " + STYLER_POSTS + " OR a.received >= " + STYLER_VOTES + " THEN 2"
-            + " WHEN a.posts >= 1 THEN 1 ELSE 0 END)";
+    private static final String BADGE_RULE = reaches(BADGE_TIER);
+
+    /** 등급 0~5 (위 TIERS 기준, 높은 등급부터 검사) */
+    private static final String TIER_RULE = "(CASE"
+            + " WHEN " + reaches(5) + " THEN 5 WHEN " + reaches(4) + " THEN 4 WHEN " + reaches(3) + " THEN 3"
+            + " WHEN " + reaches(2) + " THEN 2 WHEN " + reaches(1) + " THEN 1 ELSE 0 END)";
 
     /** 이 아이템이 어느 칸에든 들어간 글 */
     private static final String HAS_PHOTO = "EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id) AS has_photo";
@@ -315,13 +320,16 @@ public class StyleVoteController {
     }
 
     @GetMapping("/popular")
-    public List<WeightedOutfit> popular(@RequestParam(defaultValue = "8") int limit) {
+    public List<WeightedOutfit> popular(@RequestParam(defaultValue = "8") int limit,
+                                        @RequestParam(defaultValue = "0") int days) {
         ensureSchema();
+        // days > 0 이면 최근 days 일 동안 올라온 코디만 (메인의 "이번 주 인기 아이템"·"많이 입는 색 조합" 집계용)
+        String recent = days > 0 ? " AND p.created_at >= NOW() - INTERVAL " + Math.min(days, 3650) + " DAY" : "";
         return jdbc.query("""
                 SELECT p.*, 1 + COUNT(v.post_id) AS weight FROM style_posts p LEFT JOIN style_votes v ON v.post_id = p.id
-                WHERE p.hidden = 0 AND p.category = 'OUTFIT' GROUP BY p.id ORDER BY weight DESC, p.id DESC LIMIT ?""",
+                WHERE p.hidden = 0 AND p.category = 'OUTFIT'""" + recent + " GROUP BY p.id ORDER BY weight DESC, p.id DESC LIMIT ?",
                 (rs, i) -> new WeightedOutfit(rs.getLong("id"), rs.getString("title"), outfitOf(rs), rs.getInt("weight")),
-                Math.max(1, Math.min(limit, 30)));
+                Math.max(1, Math.min(limit, 500)));
     }
 
     /** 글 목록에 링크 태그를 한 번의 쿼리로 붙인다 */
@@ -473,6 +481,32 @@ public class StyleVoteController {
                 this::mapPost, me, me, me, Math.max(1, Math.min(limit, 24))));
     }
 
+    public record PersonHit(long userId, String nickname, int posts, int votes, int tier) {}
+
+    /** 사람 찾기: 닉네임에 검색어가 들어간 사용자 (똑같은 닉네임 → 글 많은 순). 검색어가 없으면 활발한 사람 (받은 추천 → 글 많은 순) */
+    @GetMapping("/people")
+    public List<PersonHit> people(@RequestParam(defaultValue = "") String q) {
+        ensureSchema();
+        String query = q.strip();
+        if (query.length() > 20) return List.of();
+        if (query.isEmpty()) {
+            return jdbc.query("""
+                    SELECT u.id, u.nickname, a.posts, a.received, %s AS tier
+                    FROM users u JOIN (%s) a ON a.author_id = CONCAT('u:', u.id)
+                    WHERE u.nickname <> '' ORDER BY a.received DESC, a.posts DESC, u.id LIMIT 12""".formatted(TIER_RULE, AUTHOR_STATS),
+                    (rs, i) -> new PersonHit(rs.getLong("id"), rs.getString("nickname"), rs.getInt("posts"), rs.getInt("received"), rs.getInt("tier")));
+        }
+        String like = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        return jdbc.query("""
+                SELECT u.id, u.nickname, COALESCE(a.posts, 0) AS posts, COALESCE(a.received, 0) AS received,
+                       COALESCE(%s, 0) AS tier
+                FROM users u LEFT JOIN (%s) a ON a.author_id = CONCAT('u:', u.id)
+                WHERE u.nickname <> '' AND u.nickname LIKE ?
+                ORDER BY (u.nickname = ?) DESC, posts DESC, u.id LIMIT 30""".formatted(TIER_RULE, AUTHOR_STATS),
+                (rs, i) -> new PersonHit(rs.getLong("id"), rs.getString("nickname"), rs.getInt("posts"), rs.getInt("received"), rs.getInt("tier")),
+                like, query);
+    }
+
     @GetMapping("/users/{userId}")
     public ProfilePage profile(@PathVariable long userId, @RequestHeader(value = "Authorization", required = false) String authorization) {
         ensureSchema();
@@ -587,7 +621,7 @@ public class StyleVoteController {
                       FOREIGN KEY (post_id) REFERENCES style_posts(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""");
             Integer seeded = jdbc.queryForObject("SELECT COUNT(*) FROM style_posts WHERE category = 'OUTFIT' AND top_item <> ''", Integer.class);
-            if (seeded != null && seeded == 0) {
+            if (SEED_EXAMPLES && seeded != null && seeded == 0) {
                 // 예전 예시 글(작성자 없음)은 새 구조에 맞는 예시 코디로 바꾼다. 사람들이 쓴 글은 그대로 둔다.
                 jdbc.update("DELETE FROM style_posts WHERE author_id = '' AND nickname = 'FYOF'");
                 seed();
@@ -650,6 +684,9 @@ public class StyleVoteController {
                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'style_posts' AND COLUMN_NAME = ?""", Integer.class, column);
         if (current != null && current < length) jdbc.execute("ALTER TABLE style_posts MODIFY " + column + " " + definition);
     }
+
+    /** 빈 DB 에 예시 코디를 넣을지. 실제 사용자 글로만 보여 주기로 해서 꺼 둔다 (다시 켜려면 true). */
+    private static final boolean SEED_EXAMPLES = false;
 
     /**
      * 처음부터 아이템 페이지가 비어 보이지 않도록 넣는 예시 코디 ("FYOF 예시").
@@ -777,8 +814,12 @@ public class StyleVoteController {
     private static Outfit outfit(String category, Outfit o) {
         if (!"OUTFIT".equals(category)) return null;
         if (o == null) throw bad("코디를 골라 주세요.");
-        return new Outfit(piece(o.outer(), "아우터", false), piece(o.top(), "상의", true), piece(o.bottom(), "하의", true),
-                piece(o.shoes(), "신발", true), piece(o.acc(), "액세서리", false));
+        // 사진에 보이는 아이템만 올려도 된다 (상반신 사진 등). 하나 이상은 있어야 한다.
+        Outfit out = new Outfit(piece(o.outer(), "아우터", false), piece(o.top(), "상의", false), piece(o.bottom(), "하의", false),
+                piece(o.shoes(), "신발", false), piece(o.acc(), "액세서리", false));
+        if (List.of(out.outer(), out.top(), out.bottom(), out.shoes(), out.acc()).stream().allMatch(Piece::empty))
+            throw bad("아이템을 하나 이상 골라 주세요.");
+        return out;
     }
 
     private static Piece piece(Piece p, String label, boolean required) {

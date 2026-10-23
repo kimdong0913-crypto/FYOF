@@ -30,6 +30,23 @@ export async function toggleSaved(productId: string) {
   }
 }
 
+/** 여러 벌을 한 번에 담거나(on) 뺀다. 먼저 화면에 반영하고, 실패한 것만 되돌린다. */
+export async function setManySaved(productIds: string[], on: boolean) {
+  const targets = productIds.filter(id => saved.has(id) !== on);
+  if (targets.length === 0) return;
+  const next = new Set(saved);
+  targets.forEach(id => (on ? next.add(id) : next.delete(id)));
+  saved = next; emit();
+  const results = await Promise.allSettled(targets.map(id => api<void>(`/api/closet/items/${id}`, { method: on ? "PUT" : "DELETE" })));
+  const failed = targets.filter((_, i) => results[i]!.status === "rejected");
+  if (failed.length) {
+    const undo = new Set(saved);
+    failed.forEach(id => (on ? undo.delete(id) : undo.add(id)));
+    saved = undo; emit();
+    throw new Error(`${failed.length}벌은 바꾸지 못했어요.`);
+  }
+}
+
 /** 로그인한 사용자의 찜 목록. 로그인하지 않았으면 빈 목록. */
 export function useSavedItems(): ReadonlySet<string> {
   const user = useUser();

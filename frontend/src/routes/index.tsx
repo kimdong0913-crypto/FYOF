@@ -1,13 +1,17 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Heart, MoveUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HomeInsights } from "@/components/home-insights";
+import { PostModal, toggleVote, type ModalPost } from "@/components/post-modal";
 import { RankingPanel } from "@/components/ranking-panel";
 import { SearchBox } from "@/components/search-box";
 import { SiteHeader, SiteFooter } from "@/components/site-header";
 import { TierBadge } from "@/components/tier-badge";
+import { UserAvatar } from "@/components/user-avatar";
 import { api, photoUrl } from "@/lib/api";
 import { categories, itemById, items } from "@/lib/catalog";
+import { likeBurst } from "@/lib/like-burst";
 import { useUser } from "@/lib/session";
 
 export const Route = createFileRoute("/")({
@@ -21,7 +25,7 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type FeedPost = { id: number; item: string; title: string; colors: string[]; nickname: string; createdAt: string; votes: number; hasPhoto: boolean; authorUserId: number | null; authorTier: number };
+type FeedPost = ModalPost & { nickname: string; authorUserId: number | null; authorTier: number };
 type Trending = { post: FeedPost; recentVotes: number };
 
 const featured = ["mustang", "long-padding", "hoodie", "blazer", "slacks", "loafers"];
@@ -36,18 +40,22 @@ function timeAgo(iso: string) {
   return `${Math.floor(diff / 1440)}일 전`;
 }
 
-// 코디 카드: 사진이 있으면 사진, 없으면 색 줄무늬. 누르면 그 아이템 가이드(커뮤니티)로.
-function FeedCard({ post, rank, recent, label }: { post: FeedPost; rank?: number; recent?: number; label: string }) {
+// 코디 카드: 사진이 있으면 사진, 없으면 색 줄무늬. 누르면 게시물 창, 하트를 누르면 좋아요.
+function FeedCard({ post, rank, recent, label, onOpen, onVote }: { post: FeedPost; rank?: number; recent?: number; label: string; onOpen: () => void; onVote: () => void }) {
   const item = itemById(post.item);
   return <article className="feed-card">
-    <Link to="/item/$id" params={{ id: post.item }} className="feed-card-media" aria-label={`${post.title} — ${item?.name ?? ""} 가이드로`}>
-      {post.hasPhoto ? <img src={photoUrl(post.id)} alt={post.title} loading="lazy"/> : <span className="feed-colors">{post.colors.map((c, i) => <i key={i} style={{ background: c }}/>)}</span>}
+    <div className="feed-card-media">
+      <button type="button" className="feed-card-open" onClick={onOpen} aria-label={`${post.title} 게시물 보기`}>
+        {post.hasPhoto ? <img src={photoUrl(post.id)} alt={post.title} loading="lazy"/> : <span className="feed-colors">{post.colors.map((c, i) => <i key={i} style={{ background: c }}/>)}</span>}
+      </button>
       {rank !== undefined && <span className="feed-rank">{rank}</span>}
-      <span className="feed-likes"><Heart size={13} fill="currentColor"/> {recent ?? post.votes}{recent !== undefined && <small> {label}</small>}</span>
-    </Link>
+      <button type="button" className={post.voted ? "feed-likes voted" : "feed-likes"} aria-pressed={post.voted} aria-label={post.voted ? "좋아요 취소" : "좋아요"} onClick={e => { likeBurst(e.currentTarget, !post.voted); onVote(); }}>
+        <Heart size={13} fill={post.voted ? "currentColor" : "none"}/> <b key={recent ?? post.votes} className="like-count">{recent ?? post.votes}</b>{recent !== undefined && <small> {label}</small>}
+      </button>
+    </div>
     <div className="feed-card-meta">
       <strong>{post.title}</strong>
-      <span>{post.authorUserId ? <Link to="/u/$id" params={{ id: String(post.authorUserId) }}>{post.nickname}</Link> : post.nickname}<TierBadge tier={post.authorTier}/></span>
+      <span><UserAvatar userId={post.authorUserId} nickname={post.nickname}/>{post.authorUserId ? <Link to="/u/$id" params={{ id: String(post.authorUserId) }}>{post.nickname}</Link> : post.nickname}<TierBadge tier={post.authorTier}/></span>
       <small>{item?.name} · {timeAgo(post.createdAt)}</small>
     </div>
   </article>;
@@ -60,6 +68,24 @@ function Index() {
   const [latest, setLatest] = useState<FeedPost[] | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [rankVersion, setRankVersion] = useState(0);
+  const [open, setOpen] = useState<FeedPost | null>(null);
+  const [voteError, setVoteError] = useState("");
+  const navigate = useNavigate();
+
+  // 좋아요: 지금 뜨는 코디·방금 올라온 코디·열린 창에 같은 글이 있으면 모두 바꾼다
+  const vote = async (post: FeedPost) => {
+    if (!user) { await navigate({ to: "/login", search: { redirect: "/" } }); return; }
+    setVoteError("");
+    try {
+      const res = await toggleVote(post.id);
+      const delta = res.votes - post.votes;
+      const apply = (p: FeedPost) => (p.id === post.id ? { ...p, ...res } : p);
+      setTrending(t => t && t.map(x => x.post.id === post.id ? { post: apply(x.post), recentVotes: Math.max(0, x.recentVotes + (post.mine ? 0 : delta)) } : x));
+      setLatest(l => l && l.map(apply));
+      setOpen(o => o && apply(o));
+      setRankVersion(v => v + 1);
+    } catch (e) { setVoteError(e instanceof Error ? e.message : "좋아요를 누르지 못했어요."); }
+  };
 
   // 30초마다 다시 불러와서 "실시간"으로 보이게 한다 (탭이 안 보일 때는 쉰다)
   useEffect(() => {
@@ -96,24 +122,23 @@ function Index() {
       </div>
       {trending === null ? <p className="vote-empty">불러오는 중…</p>
         : trending.length === 0 ? <p className="vote-empty">아직 코디가 없어요. 아이템 가이드에서 첫 코디를 올려 보세요.</p>
-        : <div className="feed-card-grid">{trending.map((t, i) => <FeedCard key={t.post.id} post={t.post} rank={i + 1} recent={t.recentVotes} label={label}/>)}</div>}
+        : <div className="feed-card-grid">{trending.map((t, i) => <FeedCard key={t.post.id} post={t.post} rank={i + 1} recent={t.recentVotes} label={label} onOpen={() => setOpen(t.post)} onVote={() => void vote(t.post)}/>)}</div>}
     </section>
 
-    <section className="home-community wrap">
-      <div className="home-community-rank"><RankingPanel version={rankVersion}/></div>
-      <div className="home-community-latest">
-        <span className="fit-control-heading">JUST POSTED</span>
-        <h3>방금 올라온 코디</h3>
+    <HomeInsights version={Math.floor(rankVersion / 4)}
+      bottomLeft={<div className="home-community-rank"><RankingPanel version={rankVersion}/></div>}
+      bottomRight={<div className="home-community-latest">
+        <span className="fit-control-heading">방금 올라온 코디</span>
         {latest === null ? <p className="vote-form-note">불러오는 중…</p>
           : latest.length === 0 ? <p className="vote-form-note">아직 올라온 코디가 없어요.</p>
-          : <div className="latest-grid">{latest.map(p => <FeedCard key={p.id} post={p} label=""/>)}</div>}
+          : <div className="latest-grid">{latest.map(p => <FeedCard key={p.id} post={p} label="" onOpen={() => setOpen(p)} onVote={() => void vote(p)}/>)}</div>}
         {!user && <Button asChild className="vote-submit home-join"><Link to="/login" search={{ redirect: "/" }}>가입하고 내 코디 올리기 <ArrowUpRight size={16}/></Link></Button>}
-      </div>
-    </section>
+      </div>}/>
 
     <section className="home-categories wrap"><div className="section-heading"><div><span className="eyebrow">BROWSE / {items.length} ITEMS</span><h2>카테고리별로 찾아보기<span className="heading-period">.</span></h2></div></div>
       <div className="home-category-grid">{categories.map(c => <Link key={c.id} to="/results" search={{ q: c.ko }} className="home-category"><span>{c.en}</span><strong>{c.ko}</strong><small>{items.filter(i => i.category === c.id).length} ITEMS</small><ArrowUpRight size={18}/></Link>)}</div>
     </section>
     <section className="home-bottom wrap"><span>TRY BEFORE YOU WEAR.</span><Link to="/fitting" search={{ item: "denim", fit: "wide" }}>가상으로 먼저 입어보기 <ArrowDownRight size={24}/></Link></section>
+    {open && <PostModal post={open} onClose={() => { setOpen(null); setVoteError(""); }} onVote={() => void vote(open)} error={voteError}/>}
   </main><SiteFooter/></>;
 }

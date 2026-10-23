@@ -14,6 +14,7 @@ import { Route as ClosetRouteImport } from './routes/closet'
 import { Route as FittingRouteImport } from './routes/fitting'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
+import { Route as PeopleRouteImport } from './routes/people'
 import { Route as ResultsRouteImport } from './routes/results'
 import { Route as ItemIdRouteImport } from './routes/item/$id'
 import { Route as UIdRouteImport } from './routes/u/$id'
@@ -43,6 +44,11 @@ const MeRoute = MeRouteImport.update({
   path: '/me',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PeopleRoute = PeopleRouteImport.update({
+  id: '/people',
+  path: '/people',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResultsRoute = ResultsRouteImport.update({
   id: '/results',
   path: '/results',
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/fitting': typeof FittingRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/people': typeof PeopleRoute
   '/results': typeof ResultsRoute
   '/item/$id': typeof ItemIdRoute
   '/u/$id': typeof UIdRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/fitting': typeof FittingRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/people': typeof PeopleRoute
   '/results': typeof ResultsRoute
   '/item/$id': typeof ItemIdRoute
   '/u/$id': typeof UIdRoute
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/fitting': typeof FittingRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/people': typeof PeopleRoute
   '/results': typeof ResultsRoute
   '/item/$id': typeof ItemIdRoute
   '/u/$id': typeof UIdRoute
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | '/fitting'
     | '/login'
     | '/me'
+    | '/people'
     | '/results'
     | '/item/$id'
     | '/u/$id'
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/fitting'
     | '/login'
     | '/me'
+    | '/people'
     | '/results'
     | '/item/$id'
     | '/u/$id'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/fitting'
     | '/login'
     | '/me'
+    | '/people'
     | '/results'
     | '/item/$id'
     | '/u/$id'
@@ -129,6 +141,7 @@ export interface RootRouteChildren {
   FittingRoute: typeof FittingRoute
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
+  PeopleRoute: typeof PeopleRoute
   ResultsRoute: typeof ResultsRoute
   ItemIdRoute: typeof ItemIdRoute
   UIdRoute: typeof UIdRoute
@@ -171,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/people': {
+      id: '/people'
+      path: '/people'
+      fullPath: '/people'
+      preLoaderRoute: typeof PeopleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/results': {
       id: '/results'
       path: '/results'
@@ -201,6 +221,7 @@ const rootRouteChildren: RootRouteChildren = {
   FittingRoute: FittingRoute,
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
+  PeopleRoute: PeopleRoute,
   ResultsRoute: ResultsRoute,
   ItemIdRoute: ItemIdRoute,
   UIdRoute: UIdRoute,

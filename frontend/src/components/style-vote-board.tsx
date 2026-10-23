@@ -4,6 +4,8 @@ import { ArrowUpRight, ChevronDown, Flag, Heart, ImagePlus, Lightbulb, Pencil, S
 import { Button } from "@/components/ui/button";
 import { LinkList, LinkTagEditor, TaggedPhoto, linksProblem, type LinkTag } from "@/components/link-tags";
 import { OutfitPieces } from "@/components/outfit-card";
+import { UserAvatar } from "@/components/user-avatar";
+import { likeBurst } from "@/lib/like-burst";
 import { RankingPanel } from "@/components/ranking-panel";
 import { TierBadge } from "@/components/tier-badge";
 import { api, errorText, photoUrl } from "@/lib/api";
@@ -50,12 +52,12 @@ function OutfitEditor({ outfit, onChange, lockSlot }: { outfit: Outfit; onChange
     const item = itemById(piece.item);
     return <div key={s.id} className="outfit-editor-row">
       <div className="outfit-editor-head">
-        <span>{s.ko}{s.required ? "" : " (선택)"}</span>
+        <span>{s.ko} (선택)</span>
         <div className="select-wrap"><select aria-label={`${s.ko} 아이템`} value={piece.item} disabled={lockSlot === s.id} onChange={e => {
           const next = itemById(e.target.value);
           onChange({ ...outfit, [s.id]: { item: e.target.value, color: next && !next.colors.includes(piece.color) ? next.colors[0] ?? "" : e.target.value ? piece.color : "", fit: next?.defaultFit ?? "" } });
         }}>
-          <option value="">{s.required ? "아이템 고르기" : "없음"}</option>
+          <option value="">없음</option>
           {itemsForSlot(s.id).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
         </select><ChevronDown size={14}/></div>
       </div>
@@ -70,7 +72,12 @@ function OutfitEditor({ outfit, onChange, lockSlot }: { outfit: Outfit; onChange
   })}</div>;
 }
 
-const missing = (o: Outfit) => slots.find(s => s.required && (!o[s.id].item || !o[s.id].color)) ?? slots.find(s => o[s.id].item && !o[s.id].color);
+// 사진에 보이는 아이템만 골라도 된다: 하나 이상 고르고, 고른 아이템은 색까지 정해야 한다
+const missing = (o: Outfit) => {
+  const noColor = slots.find(s => o[s.id].item && !o[s.id].color);
+  if (noColor) return `${noColor.ko} 색을 골라 주세요.`;
+  return slots.some(s => o[s.id].item) ? null : "아이템을 하나 이상 골라 주세요.";
+};
 
 export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: string | undefined; onChange?: () => void }) {
   const user = useUser();
@@ -150,7 +157,7 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
     if (!editing) return;
     const { id, draft } = editing;
     const post = posts.find(p => p.id === id);
-    if (post?.category === "OUTFIT") { const m = missing(draft.outfit); if (m) { setNotice({ id, text: `${m.ko} 아이템과 색을 골라 주세요.` }); return; } }
+    if (post?.category === "OUTFIT") { const m = missing(draft.outfit); if (m) { setNotice({ id, text: m }); return; } }
     const finalTitle = draft.title.trim() || (post?.category === "OUTFIT" ? outfitTitle(draft.outfit) : "");
     if (!finalTitle) { setNotice({ id, text: "제목을 입력해 주세요." }); return; }
     const linkError = linksProblem(draft.links);
@@ -167,7 +174,7 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (category === "OUTFIT") { const m = missing(outfit); if (m) { setFormError(`${m.ko} 아이템과 색을 골라 주세요.`); return; } }
+    if (category === "OUTFIT") { const m = missing(outfit); if (m) { setFormError(m); return; } }
     if (category === "TIP" && !comment.trim()) { setFormError("팁 내용을 적어 주세요."); return; }
     const finalTitle = title.trim() || (category === "OUTFIT" ? outfitTitle(outfit) : `${item.name} 입는 팁`);
     const linkError = linksProblem(links);
@@ -212,7 +219,7 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
             <div className="vote-body">
               <div className="vote-meta">
                 <span>{post.category === "OUTFIT" ? <><Shirt size={11}/> OUTFIT</> : <><Lightbulb size={11}/> TIP</>}</span>
-                <span className="vote-author">{post.authorUserId ? <Link to="/u/$id" params={{ id: String(post.authorUserId) }} className="vote-author-link">{post.nickname}</Link> : post.nickname}<TierBadge tier={post.authorTier}/>{post.mine && <em>· 내 글</em>} · {timeAgo(post.createdAt)}{post.edited && " · 수정됨"}</span>
+                <span className="vote-author"><UserAvatar userId={post.authorUserId} nickname={post.nickname}/>{post.authorUserId ? <Link to="/u/$id" params={{ id: String(post.authorUserId) }} className="vote-author-link">{post.nickname}</Link> : post.nickname}<TierBadge tier={post.authorTier}/>{post.mine && <em>· 내 글</em>} · {timeAgo(post.createdAt)}{post.edited && " · 수정됨"}</span>
               </div>
               {isEditing ? <form className="vote-edit" onSubmit={saveEdit}>
                 {post.category === "OUTFIT" && <OutfitEditor outfit={editing.draft.outfit} onChange={o => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, outfit: o } })}/>}
@@ -236,7 +243,7 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
               </>}
               {notice?.id === post.id && <p className="ai-error" role="alert">{notice.text}</p>}
             </div>
-            <Button variant="outline" className={post.voted ? "vote-button voted" : "vote-button"} aria-pressed={post.voted} aria-label={`${post.title}에 추천`} onClick={() => vote(post)}><Heart size={15} fill={post.voted ? "currentColor" : "none"}/><strong>{post.votes}</strong></Button>
+            <Button variant="outline" className={post.voted ? "vote-button voted" : "vote-button"} aria-pressed={post.voted} aria-label={`${post.title}에 추천`} onClick={e => { likeBurst(e.currentTarget, !post.voted); void vote(post); }}><Heart size={15} fill={post.voted ? "currentColor" : "none"}/><strong key={post.votes} className="like-count">{post.votes}</strong></Button>
           </li>;
         })}</ol>}
       </div>

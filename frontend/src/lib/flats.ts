@@ -298,9 +298,24 @@ const specs: Record<string, Spec> = {
 };
 
 /** 아이템 도식을 data URI 로. 없는 아이템이면 undefined. fit: 핏(실루엣), trimHex: 무스탕 칼라처럼 다른 색이 들어가는 부분 */
-export function flatImage(id: string, hex: string, fit?: string, trimHex = "#E9E2D0"): string | undefined {
+export type FlatStyle = "color" | "line" | "solid";
+export function flatImage(id: string, hex: string, fit?: string, trimHex = "#E9E2D0", style: FlatStyle = "color"): string | undefined {
   const spec = specs[id];
   if (!spec) return undefined;
+  if (style !== "color") {
+    // line: 얇은 검정 선 + 아주 연한 색 / solid: 선 없이 한 가지 색 실루엣
+    const light = lum(hex) > 215;
+    const ink: Ink = style === "line"
+      ? { fill: shade(hex, light ? -0.03 : 0.86), edge: "#1C1C1C", detail: "#1C1C1C", inner: shade(hex, light ? -0.06 : 0.78) }
+      : { fill: hex, edge: hex, detail: hex, inner: hex };
+    let body = spec(ink, style === "line" ? { fill: "#F7F5EF", edge: "#1C1C1C", detail: "#1C1C1C", inner: "#F7F5EF" } : ink, fit);
+    body = style === "line"
+      ? body.replace(/stroke-width="3"/g, 'stroke-width="1.6"').replace(/stroke-width="2\.5"/g, 'stroke-width="1.1"').replace(/stroke-width="2"/g, 'stroke-width="1"')
+      : body.replace(/stroke-width="2\.5"/g, 'stroke-width="0"');
+    const bg = style === "line" ? "#F3F2EE" : "#ECEBE7";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="${bg}"/><g transform="translate(0 6)">${body}</g></svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1280" viewBox="0 0 ${W} ${H}"><defs><filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="#000" flood-opacity=".13"/></filter></defs><rect width="${W}" height="${H}" fill="#ECEBE7"/><g transform="translate(0 6)" filter="url(#sh)">${spec(inks(hex), inks(trimHex), fit)}</g></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

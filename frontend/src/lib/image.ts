@@ -14,3 +14,19 @@ export async function shrinkImage(file: File, max = 1080, quality = 0.86): Promi
   if (!blob) throw new Error("사진을 처리하지 못했어요.");
   return blob;
 }
+
+/** 프로필 사진용: 가운데를 정사각형으로 잘라 size px JPEG 로 만든다. */
+export async function squareImage(file: File, size = 400, quality = 0.88): Promise<Blob> {
+  if (!file.type.startsWith("image/")) throw new Error("사진 파일만 올릴 수 있어요.");
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = Math.min(size, side);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("사진을 처리하지 못했어요.");
+  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/jpeg", quality));
+  if (!blob) throw new Error("사진을 처리하지 못했어요.");
+  return blob;
+}
