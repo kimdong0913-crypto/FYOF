@@ -1,6 +1,7 @@
 import { getToken, setSession } from "@/lib/session";
 
-export const API_URL: string = import.meta.env["VITE_API_URL"] ?? "http://localhost:8081";
+// 기본은 같은 주소의 /api (개발 서버가 백엔드로 전달, vite.config.ts). 따로 둔 서버를 쓰려면 VITE_API_URL 을 지정한다.
+export const API_URL: string = import.meta.env["VITE_API_URL"] ?? "";
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   // FormData 는 브라우저가 multipart 경계(boundary)를 붙이도록 Content-Type 을 직접 지정하지 않는다.

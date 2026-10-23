@@ -68,8 +68,8 @@ function BadgeTip({ a, x, y }: { a: Achievement; x: number; y: number }) {
   return <div className={`badge-tip lv-${lv?.id ?? "none"}`} role="tooltip" style={{ left, top: y }}>
     <div className="badge-tip-head"><strong>{a.name}</strong><span>{lv ? lv.en : "LOCKED"}</span></div>
     <p>{TIP[a.id] ?? `${a.what}이(가) 늘어나면 등급이 올라가요.`}</p>
-    <p className="badge-tip-now">지금 <b>{a.value}{a.unit}</b>{nextLv && a.next !== null ? <> · {nextLv.ko}까지 <b>{a.next - a.value}{a.unit}</b> 남았어요</> : " · 최고 등급이에요!"}</p>
-    <ol className="badge-tip-steps">{LEVELS.map((l, n) => <li key={l.id} className={n < a.level ? "done" : n === a.level ? "next" : ""}><span>{l.ko}</span>{a.goals[n]}</li>)}</ol>
+    <p className="badge-tip-now">지금 <b>{a.value}{a.unit}</b>{nextLv && a.next !== null ? <> · {nextLv.en}까지 <b>{a.next - a.value}{a.unit}</b> 남았어요</> : " · 최고 등급이에요!"}</p>
+    <ol className="badge-tip-steps">{LEVELS.map((l, n) => <li key={l.id} className={n < a.level ? "done" : n === a.level ? "next" : ""}><span>{l.en}</span>{a.goals[n]}</li>)}</ol>
   </div>;
 }
 

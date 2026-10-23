@@ -773,3 +773,4 @@ button.feed-likes.voted small { color: rgba(255,255,255,.8); }
 @keyframes badge-pop-in { 0% { transform: translateY(18px) scale(.3) rotate(-25deg); opacity: 0; } 70% { opacity: 1; } 100% { transform: none; opacity: 1; } }
 @media (max-width: 560px) { .badges-count { display: none; } }
 @media (prefers-reduced-motion: reduce) { .badges-drawer,.badges .badges-grid { transition: none; } .badges.is-open .badge-medal { animation: none; } }
+.badge-tip-steps li span { font-size: 8px; letter-spacing: .06em; }
