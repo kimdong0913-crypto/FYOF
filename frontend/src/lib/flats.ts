@@ -182,7 +182,7 @@ function shoeFlat(c: Ink, kind: ShoeKind) {
 }
 
 // ---------- 액세서리 ----------
-type AccKind = "cap" | "beanie" | "bucket" | "muffler" | "belt" | "tote" | "cross" | "backpack" | "glasses";
+type AccKind = "cap" | "beanie" | "bucket" | "muffler" | "belt" | "tote" | "cross" | "backpack" | "glasses" | "sunglasses" | "necklace" | "ring";
 function accFlat(c: Ink, kind: AccKind) {
   const fill = `fill="${c.fill}" stroke="${c.edge}" stroke-width="3" stroke-linejoin="round"`;
   const det = `stroke="${c.detail}" stroke-width="2.5" fill="none" stroke-linecap="round"`;
@@ -195,6 +195,9 @@ function accFlat(c: Ink, kind: AccKind) {
     case "tote": return `<path d="M120 200 L280 200 L296 400 L104 400 Z" ${fill}/><path d="M150 200 Q150 120 200 120 Q250 120 250 200" stroke="${c.edge}" stroke-width="10" fill="none"/>`;
     case "cross": return `<path d="M90 120 L262 300" stroke="${c.edge}" stroke-width="8" fill="none"/><rect x="200" y="270" width="150" height="110" rx="14" ${fill}/><path d="M200 300 Q275 330 350 300" ${det}/>`;
     case "backpack": return `<rect x="120" y="140" width="160" height="250" rx="40" ${fill}/><rect x="145" y="270" width="110" height="90" rx="14" ${fill}/><path d="M160 140 Q200 100 240 140 M150 200 Q200 215 250 200" ${det}/>`;
+    case "sunglasses": return `<path d="M88 228 Q140 214 186 228 Q190 290 140 296 Q92 292 88 228 Z" ${fill}/><path d="M214 228 Q260 214 312 228 Q308 292 260 296 Q210 290 214 228 Z" ${fill}/><path d="M186 236 Q200 226 214 236" ${det}/><path d="M88 230 L60 222 M312 230 L340 222" stroke="${c.edge}" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M108 240 Q125 232 140 236" stroke="#fff" stroke-opacity=".45" stroke-width="5" fill="none" stroke-linecap="round"/>`;
+    case "necklace": return `<path d="M120 150 Q122 300 200 330 Q278 300 280 150" fill="none" stroke="${c.edge}" stroke-width="5" stroke-dasharray="7 5"/><path d="M200 330 L200 344" stroke="${c.edge}" stroke-width="3"/><circle cx="200" cy="362" r="18" ${fill}/><circle cx="194" cy="356" r="5" fill="#fff" fill-opacity=".5"/>`;
+    case "ring": return `<ellipse cx="200" cy="262" rx="78" ry="70" fill="none" stroke="${c.edge}" stroke-width="26"/><ellipse cx="200" cy="262" rx="78" ry="70" fill="none" stroke="${c.fill}" stroke-width="20"/><path d="M150 210 Q175 196 205 196" stroke="#fff" stroke-opacity=".55" stroke-width="5" fill="none" stroke-linecap="round"/>`;
     case "glasses": return `<circle cx="140" cy="250" r="48" fill="none" stroke="${c.fill}" stroke-width="10"/><circle cx="260" cy="250" r="48" fill="none" stroke="${c.fill}" stroke-width="10"/><path d="M188 245 Q200 232 212 245 M92 240 L56 226 M308 240 L344 226" stroke="${c.fill}" stroke-width="8" fill="none" stroke-linecap="round"/>`;
   }
 }
@@ -295,6 +298,7 @@ const specs: Record<string, Spec> = {
   "ball-cap": c => accFlat(c, "cap"), beanie: c => accFlat(c, "beanie"), "bucket-hat": c => accFlat(c, "bucket"),
   muffler: c => accFlat(c, "muffler"), belt: c => accFlat(c, "belt"), "tote-bag": c => accFlat(c, "tote"),
   "cross-bag": c => accFlat(c, "cross"), backpack: c => accFlat(c, "backpack"), glasses: c => accFlat(c, "glasses"),
+  sunglasses: c => accFlat(c, "sunglasses"), necklace: c => accFlat(c, "necklace"), ring: c => accFlat(c, "ring"),
 };
 
 /** 아이템 도식을 data URI 로. 없는 아이템이면 undefined. fit: 핏(실루엣), trimHex: 무스탕 칼라처럼 다른 색이 들어가는 부분 */

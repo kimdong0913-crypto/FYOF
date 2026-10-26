@@ -41,7 +41,7 @@ function timeAgo(iso: string) {
 }
 
 // 코디 카드: 사진이 있으면 사진, 없으면 색 줄무늬. 누르면 게시물 창, 하트를 누르면 좋아요.
-function FeedCard({ post, rank, recent, label, onOpen, onVote }: { post: FeedPost; rank?: number; recent?: number; label: string; onOpen: () => void; onVote: () => void }) {
+function FeedCard({ post, rank, onOpen, onVote }: { post: FeedPost; rank?: number; onOpen: () => void; onVote: () => void }) {
   const item = itemById(post.item);
   return <article className="feed-card">
     <div className="feed-card-media">
@@ -50,7 +50,7 @@ function FeedCard({ post, rank, recent, label, onOpen, onVote }: { post: FeedPos
       </button>
       {rank !== undefined && <span className="feed-rank">{rank}</span>}
       <button type="button" className={post.voted ? "feed-likes voted" : "feed-likes"} aria-pressed={post.voted} aria-label={post.voted ? "좋아요 취소" : "좋아요"} onClick={e => { likeBurst(e.currentTarget, !post.voted); onVote(); }}>
-        <Heart size={13} fill={post.voted ? "currentColor" : "none"}/> <b key={recent ?? post.votes} className="like-count">{recent ?? post.votes}</b>{recent !== undefined && <small> {label}</small>}
+        <Heart size={13} fill={post.voted ? "currentColor" : "none"}/> <b key={post.votes} className="like-count">{post.votes}</b>
       </button>
     </div>
     <div className="feed-card-meta">
@@ -122,7 +122,7 @@ function Index() {
       </div>
       {trending === null ? <p className="vote-empty">불러오는 중…</p>
         : trending.length === 0 ? <p className="vote-empty">아직 코디가 없어요. 아이템 가이드에서 첫 코디를 올려 보세요.</p>
-        : <div className="feed-card-grid">{trending.map((t, i) => <FeedCard key={t.post.id} post={t.post} rank={i + 1} recent={t.recentVotes} label={label} onOpen={() => setOpen(t.post)} onVote={() => void vote(t.post)}/>)}</div>}
+        : <div className="feed-card-grid">{trending.map((t, i) => <FeedCard key={t.post.id} post={t.post} rank={i + 1} onOpen={() => setOpen(t.post)} onVote={() => void vote(t.post)}/>)}</div>}
     </section>
 
     <HomeInsights version={Math.floor(rankVersion / 4)}
@@ -131,7 +131,7 @@ function Index() {
         <span className="fit-control-heading">방금 올라온 코디</span>
         {latest === null ? <p className="vote-form-note">불러오는 중…</p>
           : latest.length === 0 ? <p className="vote-form-note">아직 올라온 코디가 없어요.</p>
-          : <div className="latest-grid">{latest.map(p => <FeedCard key={p.id} post={p} label="" onOpen={() => setOpen(p)} onVote={() => void vote(p)}/>)}</div>}
+          : <div className="latest-grid">{latest.map(p => <FeedCard key={p.id} post={p} onOpen={() => setOpen(p)} onVote={() => void vote(p)}/>)}</div>}
         {!user && <Button asChild className="vote-submit home-join"><Link to="/login" search={{ redirect: "/" }}>가입하고 내 코디 올리기 <ArrowUpRight size={16}/></Link></Button>}
       </div>}/>
 

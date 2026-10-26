@@ -43,14 +43,13 @@ export function CardHand({ items, onRemove }: { items: Item[]; onRemove: (id: st
     return () => { el.removeEventListener("scroll", request); window.removeEventListener("resize", request); cancelAnimationFrame(frame); };
   }, [items]);
 
-  // 마우스 휠(세로)을 가로 넘기기로: 카드가 더 넘어갈 수 있을 때만 (끝에 닿으면 페이지가 스크롤된다)
+  // Shift + 휠이면 카드를 옆으로 넘긴다. 그냥 휠은 페이지 스크롤 그대로 (위아래로 내리다 카드가 움직이지 않게)
   useEffect(() => {
     const el = track.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-      const canLeft = el.scrollLeft > 0, canRight = el.scrollLeft < el.scrollWidth - el.clientWidth - 1;
-      if ((e.deltaY < 0 && canLeft) || (e.deltaY > 0 && canRight)) { e.preventDefault(); el.scrollBy({ left: e.deltaY * 0.3, behavior: "smooth" }); }
+      if (!e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault(); el.scrollBy({ left: e.deltaY * 0.3, behavior: "smooth" });
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -85,6 +84,6 @@ export function CardHand({ items, onRemove }: { items: Item[]; onRemove: (id: st
         </div>
       </div>)}
     </div>
-    {items.length > 2 && <p className="hand-hint">← 옆으로 넘기거나 끌어서 보세요 →</p>}
+    {items.length > 2 && <p className="hand-hint">← 끌거나 Shift + 휠로 넘겨 보세요 →</p>}
   </div>;
 }

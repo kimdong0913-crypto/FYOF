@@ -774,3 +774,24 @@ button.feed-likes.voted small { color: rgba(255,255,255,.8); }
 @media (max-width: 560px) { .badges-count { display: none; } }
 @media (prefers-reduced-motion: reduce) { .badges-drawer,.badges .badges-grid { transition: none; } .badges.is-open .badge-medal { animation: none; } }
 .badge-tip-steps li span { font-size: 8px; letter-spacing: .06em; }
+/* 옷장 카드 줄: 가로 폭을 줄여 가운데에 (양옆 빈 곳에서는 편하게 페이지 스크롤) */
+.closet-row .card-hand { max-width: 860px; margin: 0 auto; }
+.closet-row .hand-track { padding-left: calc(50% - 80px); padding-right: calc(50% - 80px); }
+.closet-row .hand-track { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 7%, #000 93%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 7%, #000 93%, transparent 100%); }
+/* 배지 케이스 닫기: 오른쪽 배지부터 하나씩 쏙 들어간 뒤 케이스가 접힌다 */
+.badges.is-closing .badge-medal { animation: badge-pop-out .26s cubic-bezier(.5,0,.75,0) both !important; animation-delay: calc((var(--n) - 1 - var(--i)) * 35ms) !important; }
+.badges.is-closing .badge-item strong,.badges.is-closing .badge-line,.badges.is-closing .badge-bar { transition: opacity .2s; opacity: 0; }
+.badges.is-closing .badges-open svg { transform: rotate(0deg); }
+@keyframes badge-pop-out { 0% { transform: none; opacity: 1; } 100% { transform: translateY(16px) scale(.3) rotate(20deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .badges.is-closing .badge-medal { animation: none !important; } }
+/* 닫기 보정: 배지가 들어가는 동안 진열대 판도 같이 흐려지고, 닫힌 뒤에는 다시 나타나지 않게 */
+.badges.is-closing .badges-grid { transition: none; animation: grid-fade-out .24s ease forwards; animation-delay: calc(var(--n) * 30ms); }
+@keyframes grid-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.badges:not(.is-open) .badges-grid { opacity: 0; transition: none; }
+.badges.is-open:not(.is-closing) .badges-grid { transition: transform .45s cubic-bezier(.3,1.2,.4,1), opacity .3s; }
+/* 하트: 빨강 대신 FYOF 흑백 (안 누름 = 흰 바탕 검정 하트, 누름 = 검정 바탕 흰 하트) */
+.feed-likes { color: var(--foreground); border: 1px solid rgba(0,0,0,.08); }
+button.feed-likes.voted { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+button.feed-likes.voted small { color: rgba(255,255,255,.7); }
+.like-burst i { background: #1A1A1A; }
+.like-burst i:nth-child(odd) { background: #9A9A9A; }

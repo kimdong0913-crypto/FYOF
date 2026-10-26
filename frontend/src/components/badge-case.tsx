@@ -77,17 +77,24 @@ function BadgeTip({ a, x, y }: { a: Achievement; x: number; y: number }) {
 export function BadgeCase({ list }: { list: Achievement[] }) {
   const [tip, setTip] = useState<{ a: Achievement; x: number; y: number } | null>(null);
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);   // 닫는 중: 배지가 먼저 들어가고, 그다음 케이스가 접힌다
   const [opened, setOpened] = useState(0); // 열 때마다 바뀌어서 배지 등장 애니메이션을 다시 돌린다
   const show = (a: Achievement, el: HTMLElement) => { const r = el.getBoundingClientRect(); setTip({ a, x: r.left + r.width / 2, y: r.top }); };
   const earned = list.filter(a => a.level > 0).length;
   const points = list.reduce((n, a) => n + a.level, 0);
-  return <section className={open ? "badges is-open" : "badges"} aria-label="업적 배지">
+  return <section className={`badges${open ? " is-open" : ""}${closing ? " is-closing" : ""}`} aria-label="업적 배지" style={{ "--n": list.length } as React.CSSProperties}>
     {/* 접힌 상태: 한 줄 요약. 누르면 케이스가 열린다 */}
-    <button type="button" className="badges-toggle" aria-expanded={open} onClick={() => { setOpen(o => !o); setOpened(n => n + 1); setTip(null); }}>
+    <button type="button" className="badges-toggle" aria-expanded={open && !closing} onClick={() => {
+      setTip(null);
+      if (closing) return;
+      if (!open) { setOpen(true); setOpened(n => n + 1); return; }
+      setClosing(true);
+      window.setTimeout(() => { setOpen(false); setClosing(false); }, 260 + list.length * 35);
+    }}>
       <span className="fit-control-heading">BADGE CASE</span>
       <span className="badges-mini" aria-hidden="true">{list.map(a => <i key={a.id} className={`mini-hex lv-${a.level > 0 ? LEVELS[a.level - 1]!.id : "none"}`}/>)}</span>
       <span className="badges-count"><strong>{earned}</strong> / {list.length} 획득 · 등급 합계 <strong>{points}</strong> / {list.length * 4}</span>
-      <span className="badges-open">{open ? "닫기" : "열기"} <ChevronDown size={14}/></span>
+      <span className="badges-open">{open && !closing ? "닫기" : "열기"} <ChevronDown size={14}/></span>
     </button>
     <div className="badges-drawer"><div className="badges-drawer-inner">
     <ul className="badges-grid" key={opened}>{list.map((a, i) => {
