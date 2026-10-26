@@ -30,7 +30,7 @@ export async function toggleSaved(productId: string) {
   }
 }
 
-/** 여러 벌을 한 번에 담거나(on) 뺀다. 먼저 화면에 반영하고, 실패한 것만 되돌린다. */
+/** 여러 아이템을 한 번에 담거나(on) 뺀다. 먼저 화면에 반영하고, 실패한 것만 되돌린다. */
 export async function setManySaved(productIds: string[], on: boolean) {
   const targets = productIds.filter(id => saved.has(id) !== on);
   if (targets.length === 0) return;
@@ -43,7 +43,7 @@ export async function setManySaved(productIds: string[], on: boolean) {
     const undo = new Set(saved);
     failed.forEach(id => (on ? undo.delete(id) : undo.add(id)));
     saved = undo; emit();
-    throw new Error(`${failed.length}벌은 바꾸지 못했어요.`);
+    throw new Error(`${failed.length}개는 바꾸지 못했어요.`);
   }
 }
 
