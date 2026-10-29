@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight, ChevronDown, Flag, Heart, ImagePlus, Lightbulb, MessageCircle, Pencil, Shirt, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Camera, ChevronDown, Flag, Heart, ImagePlus, Lightbulb, MessageCircle, Pencil, Shirt, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Comments } from "@/components/comments";
 import { LinkList, LinkTagEditor, TaggedPhoto, linksProblem, type LinkTag } from "@/components/link-tags";
@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { likeBurst } from "@/lib/like-burst";
 import { RankingPanel } from "@/components/ranking-panel";
 import { TierBadge } from "@/components/tier-badge";
-import { api, errorText, photoUrl } from "@/lib/api";
+import { api, errorText, garmentUrl, photoUrl } from "@/lib/api";
 import { shrinkImage } from "@/lib/image";
 import { colorsFirst, itemById, itemsForSlot, slots, type Item } from "@/lib/catalog";
 import { fitById } from "@/lib/fits";
@@ -18,8 +18,8 @@ import { ages, colorById, genders, palette } from "@/lib/palette";
 import { useUser } from "@/lib/session";
 
 type Category = "OUTFIT" | "TIP";
-type StylePost = { id: number; item: string; category: Category; title: string; colors: string[]; comment: string; nickname: string; createdAt: string; edited: boolean; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; reported: boolean; authorBadge: boolean; hasPhoto: boolean; authorUserId: number | null; authorTier: number; links: LinkTag[]; comments: number };
-type Draft = { title: string; comment: string; outfit: Outfit; photo: "keep" | "remove" | Blob; links: LinkTag[] };
+type StylePost = { id: number; item: string; category: Category; title: string; colors: string[]; comment: string; nickname: string; createdAt: string; edited: boolean; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; reported: boolean; authorBadge: boolean; hasPhoto: boolean; authorUserId: number | null; authorTier: number; links: LinkTag[]; comments: number; hasGarment: boolean };
+type Draft = { title: string; comment: string; outfit: Outfit; photo: "keep" | "remove" | Blob; garment: "keep" | "remove" | Blob; links: LinkTag[] };
 
 const filters = [{ id: "ALL", label: "전체" }, { id: "OUTFIT", label: "코디" }, { id: "TIP", label: "팁" }] as const;
 
@@ -45,6 +45,23 @@ function PhotoPicker({ value, current, onChange, links, onLinksChange }: { value
     <LinkTagEditor src={shown ?? null} links={links} onChange={onLinksChange}/>
   </div>;
 }
+
+// 입어보기용 옷 사진: 상의·아우터만 펼쳐 찍은 사진. 있으면 카메라 실시간 AI 피팅이 이 옷을 정확하게 입힌다.
+function GarmentPicker({ value, current, onChange }: { value: Blob | null; current?: string | undefined; onChange: (b: Blob | null) => void }) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => { if (!value) { setPreview(null); return; } const u = URL.createObjectURL(value); setPreview(u); return () => URL.revokeObjectURL(u); }, [value]);
+  const shown = preview ?? current;
+  return <div className="photo-picker">
+    {shown ? <div className="garment-preview"><img src={shown} alt="입어보기용 옷 사진"/><div className="photo-bar"><span>👕 입어보기 정확도가 높아져요</span><button type="button" onClick={() => onChange(null)}><X size={13}/> 빼기</button></div></div>
+      : <label className="photo-drop"><Shirt size={20}/><span>입어보기용 옷 사진 (선택)</span><small>상의나 아우터만 바닥에 펼치거나 옷걸이에 걸어 찍어 주세요. 다른 사람이 카메라로 이 옷을 입어 볼 수 있어요</small>
+          <input type="file" accept="image/*" hidden onChange={async e => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; setError(""); try { onChange(await shrinkImage(f)); } catch (err) { setError(errorText(err, "사진을 읽지 못했어요.")); } }}/></label>}
+    {error && <p className="ai-error">{error}</p>}
+  </div>;
+}
+
+/** 상의나 아우터가 있는 코디만 입어보기용 옷 사진을 받는다 */
+const wearsTop = (o: Outfit | null) => !!o && (!!o.outer.item || !!o.top.item);
 
 // 코디 칸마다 아이템과 색을 고른다. 색은 고른 아이템이 많이 입는 색이 앞에 온다.
 function OutfitEditor({ outfit, onChange, lockSlot }: { outfit: Outfit; onChange: (o: Outfit) => void; lockSlot?: string | undefined }) {
@@ -90,6 +107,7 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
   const [posts, setPosts] = useState<StylePost[]>([]);
   const [rankVersion, setRankVersion] = useState(0);
   const [photo, setPhoto] = useState<Blob | null>(null);
+  const [garment, setGarment] = useState<Blob | null>(null);
   const [links, setLinks] = useState<LinkTag[]>([]);
   const [photoVersion, setPhotoVersion] = useState<Record<number, number>>({});
   const [filter, setFilter] = useState<(typeof filters)[number]["id"]>("ALL");
@@ -125,6 +143,11 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
   const uploadPhoto = async (id: number, blob: Blob) => {
     const form = new FormData(); form.append("image", blob, "photo.jpg");
     await api<void>(`/api/style-posts/${id}/photo`, { method: "POST", body: form });
+    setPhotoVersion(v => ({ ...v, [id]: Date.now() }));
+  };
+  const uploadGarment = async (id: number, blob: Blob) => {
+    const form = new FormData(); form.append("image", blob, "garment.jpg");
+    await api<void>(`/api/style-posts/${id}/garment`, { method: "POST", body: form });
     setPhotoVersion(v => ({ ...v, [id]: Date.now() }));
   };
 
@@ -168,6 +191,10 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
       let updated = await api<StylePost>(`/api/style-posts/${id}`, { method: "PUT", body: JSON.stringify({ title: finalTitle, comment: draft.comment, colors: [], outfit: post?.category === "OUTFIT" ? draft.outfit : null }) });
       if (draft.photo instanceof Blob) { await uploadPhoto(id, draft.photo); updated = { ...updated, hasPhoto: true }; }
       else if (draft.photo === "remove" && post?.hasPhoto) { await api<void>(`/api/style-posts/${id}/photo`, { method: "DELETE" }); updated = { ...updated, hasPhoto: false }; }
+      // 상의·아우터를 코디에서 뺐으면 옷 사진도 지운다
+      const keepGarment = post?.category === "OUTFIT" && wearsTop(draft.outfit);
+      if (keepGarment && draft.garment instanceof Blob) { await uploadGarment(id, draft.garment); updated = { ...updated, hasGarment: true }; }
+      else if ((draft.garment === "remove" || !keepGarment) && post?.hasGarment) { await api<void>(`/api/style-posts/${id}/garment`, { method: "DELETE" }); updated = { ...updated, hasGarment: false }; }
       updated = { ...updated, links: await saveLinks(id, draft.links) };
       setPosts(list => list.map(p => p.id === id ? updated : p));
       setEditing(null); setNotice(null); changed();
@@ -189,11 +216,15 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
         try { await uploadPhoto(created.id, photo); created = { ...created, hasPhoto: true }; }
         catch (err) { setFormError(`글은 올라갔지만 사진은 못 올렸어요: ${errorText(err, "다시 시도해 주세요.")}`); }
       }
+      if (garment && category === "OUTFIT" && wearsTop(outfit)) {
+        try { await uploadGarment(created.id, garment); created = { ...created, hasGarment: true }; }
+        catch (err) { setFormError(`글은 올라갔지만 옷 사진은 못 올렸어요: ${errorText(err, "수정에서 다시 올려 주세요.")}`); }
+      }
       if (links.length) {
         try { created = { ...created, links: await saveLinks(created.id, links) }; }
         catch (err) { setFormError(`글은 올라갔지만 링크는 못 달았어요: ${errorText(err, "수정에서 다시 달아 주세요.")}`); }
       }
-      setTitle(""); setComment(""); setOutfit(startOutfit()); setPhoto(null); setLinks([]);
+      setTitle(""); setComment(""); setOutfit(startOutfit()); setPhoto(null); setGarment(null); setLinks([]);
       if (filter === "ALL" || filter === created.category) setPosts(list => [created, ...list]);
       changed();
     } catch (err) { setFormError(errorText(err, "글을 올리지 못했습니다. 서버 연결을 확인해 주세요.")); }
@@ -226,6 +257,7 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
               {isEditing ? <form className="vote-edit" onSubmit={saveEdit}>
                 {post.category === "OUTFIT" && <OutfitEditor outfit={editing.draft.outfit} onChange={o => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, outfit: o } })}/>}
                 <PhotoPicker value={editing.draft.photo instanceof Blob ? editing.draft.photo : null} current={post.hasPhoto && editing.draft.photo === "keep" ? photoUrl(post.id, photoVersion[post.id]) : undefined} onChange={b => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, photo: b ?? "remove" } })} links={editing.draft.links} onLinksChange={l => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, links: l } })}/>
+                {post.category === "OUTFIT" && wearsTop(editing.draft.outfit) && <GarmentPicker value={editing.draft.garment instanceof Blob ? editing.draft.garment : null} current={post.hasGarment && editing.draft.garment === "keep" ? garmentUrl(post.id, photoVersion[post.id]) : undefined} onChange={b => setEditing(ed => ed && { ...ed, draft: { ...ed.draft, garment: b ?? "remove" } })}/>}
                 <input className="vote-input" aria-label="제목 수정" maxLength={40} value={editing.draft.title} onChange={e => setEditing({ id: post.id, draft: { ...editing.draft, title: e.target.value } })} placeholder="제목 (비우면 자동)"/>
                 <textarea className="vote-input vote-textarea" aria-label="내용 수정" maxLength={200} value={editing.draft.comment} onChange={e => setEditing({ id: post.id, draft: { ...editing.draft, comment: e.target.value } })}/>
                 <div className="vote-owner-actions"><Button type="submit" size="sm">저장</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setEditing(null); setNotice(null); }}>취소</Button></div>
@@ -238,9 +270,10 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
                 <span className="vote-track"><span style={{ width: `${share}%` }}/></span>
                 <div className="vote-owner-actions">
                   <Button size="sm" variant="ghost" aria-expanded={openComments === post.id} onClick={() => setOpenComments(openComments === post.id ? null : post.id)}><MessageCircle size={13}/> 댓글 {post.comments}</Button>
+                  {post.category === "OUTFIT" && wearsTop(post.outfit) && <Button asChild size="sm" variant="ghost"><Link to="/fitting" search={{ item: post.item, mode: "live", post: post.id }}><Camera size={13}/> 입어보기{post.hasGarment && " 👕"}</Link></Button>}
                   {post.mine ? (confirmDelete === post.id
                     ? <><span className="vote-confirm">정말 삭제할까요?</span><Button size="sm" variant="ghost" className="danger" onClick={() => remove(post)}>삭제</Button><Button size="sm" variant="ghost" onClick={() => setConfirmDelete(null)}>취소</Button></>
-                    : <><Button size="sm" variant="ghost" onClick={() => { setEditing({ id: post.id, draft: { title: post.title, comment: post.comment, outfit: post.outfit ?? emptyOutfit(), photo: "keep", links: post.links } }); setConfirmDelete(null); setNotice(null); }}><Pencil size={13}/> 수정</Button><Button size="sm" variant="ghost" onClick={() => { setConfirmDelete(post.id); setEditing(null); }}><Trash2 size={13}/> 삭제</Button></>)
+                    : <><Button size="sm" variant="ghost" onClick={() => { setEditing({ id: post.id, draft: { title: post.title, comment: post.comment, outfit: post.outfit ?? emptyOutfit(), photo: "keep", garment: "keep", links: post.links } }); setConfirmDelete(null); setNotice(null); }}><Pencil size={13}/> 수정</Button><Button size="sm" variant="ghost" onClick={() => { setConfirmDelete(post.id); setEditing(null); }}><Trash2 size={13}/> 삭제</Button></>)
                     : <Button size="sm" variant="ghost" disabled={post.reported} onClick={() => report(post)} aria-label={`${post.title} 신고`}><Flag size={13}/> {post.reported ? "신고됨" : "신고"}</Button>}
                 </div>
               </>}
@@ -268,6 +301,7 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
           {category === "OUTFIT" && <><label className="vote-label">코디 고르기</label><OutfitEditor outfit={outfit} onChange={setOutfit} lockSlot={slotForItem(item)}/></>}
           <label className="vote-label">사진</label>
           <PhotoPicker value={photo} onChange={setPhoto} links={links} onLinksChange={setLinks}/>
+          {category === "OUTFIT" && wearsTop(outfit) && <GarmentPicker value={garment} onChange={setGarment}/>}
           <label className="vote-label" htmlFor="vote-title">제목{category === "OUTFIT" ? " (비우면 자동)" : " (선택)"}</label>
           <input id="vote-title" className="vote-input" maxLength={40} value={title} onChange={e => setTitle(e.target.value)} placeholder={category === "OUTFIT" ? outfitTitle(outfit) || "예) 화이트 셔츠 + 인디고 와이드" : `${item.name} 입는 팁`}/>
           <label className="vote-label" htmlFor="vote-comment">{category === "OUTFIT" ? "한마디" : "팁 내용"}</label>

@@ -40,6 +40,7 @@ import org.springframework.web.server.ResponseStatusException;
  * 아이템 페이지는 그 아이템이 들어간 코디를 모아 "어떤 색으로, 무엇과 함께 입는지" 집계한다.
  *   GET    /api/style-posts?item=wide&category=ALL|OUTFIT|TIP&sort=votes|recent
  *   POST   /api/style-posts               (로그인) { item, category, title, comment, outfit..., colors[], gender, ageGroup }
+ *   GET    /api/style-posts/{id}          -> 글 하나 (가상 피팅에서 "이 코디 입어보기")
  *   PUT    /api/style-posts/{id}          (본인)   { title, comment, outfit..., colors[] }
  *   DELETE /api/style-posts/{id}          (본인)
  *   POST   /api/style-posts/{id}/vote     (로그인) -> 투표 토글 { votes, voted }
@@ -52,6 +53,9 @@ import org.springframework.web.server.ResponseStatusException;
  *   POST   /api/style-posts/{id}/photo    (본인)   multipart image -> 코디 사진 붙이기(바꾸기)
  *   DELETE /api/style-posts/{id}/photo    (본인)
  *   GET    /api/style-posts/{id}/photo    -> image/jpeg (누구나)
+ *   POST   /api/style-posts/{id}/garment  (본인)   multipart image -> 입어보기용 옷 사진(상의·아우터만 찍은 사진) 붙이기
+ *   DELETE /api/style-posts/{id}/garment  (본인)
+ *   GET    /api/style-posts/{id}/garment  -> image (누구나). 실시간 AI 피팅(LiveTryOnController)이 이 사진을 입힌다
  *   PUT    /api/style-posts/{id}/links    (본인)   [{ label, url, x, y }] -> 구매처 링크 태그를 통째로 바꾼다 (최대 5개, x·y 는 사진 위 위치 %)
  *   GET    /api/style-posts/users/{userId} -> 프로필 + 그 사람이 올린 글 (인스타 피드처럼)
  * 댓글은 CommentController (/api/style-posts/{id}/comments) 가 맡고, 글에는 댓글 수(comments)만 붙인다.
@@ -88,10 +92,10 @@ public class StyleVoteController {
     public record StylePost(long id, String item, String category, String title, List<String> colors,
                             String comment, String nickname, String createdAt, boolean edited, Outfit outfit,
                             int votes, boolean voted, boolean mine, boolean reported, boolean authorBadge,
-                            boolean hasPhoto, Long authorUserId, int authorTier, List<LinkTag> links, int comments) {
+                            boolean hasPhoto, Long authorUserId, int authorTier, List<LinkTag> links, int comments, boolean hasGarment) {
         StylePost withLinks(List<LinkTag> l) {
             return new StylePost(id, item, category, title, colors, comment, nickname, createdAt, edited, outfit, votes, voted, mine,
-                    reported, authorBadge, hasPhoto, authorUserId, authorTier, l, comments);
+                    reported, authorBadge, hasPhoto, authorUserId, authorTier, l, comments, hasGarment);
         }
     }
 
@@ -140,8 +144,9 @@ public class StyleVoteController {
 
     /** 이 아이템이 어느 칸에든 들어간 글 */
     private static final String HAS_PHOTO = "EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id) AS has_photo";
-    /** 글 목록에 같이 읽는 사진 여부 + 댓글 수 */
-    private static final String EXTRAS = HAS_PHOTO + ", (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = p.id) AS comment_count";
+    /** 글 목록에 같이 읽는 사진 여부 + 댓글 수 + 옷 사진 여부 */
+    private static final String EXTRAS = HAS_PHOTO + ", (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = p.id) AS comment_count"
+            + ", EXISTS (SELECT 1 FROM post_garments g WHERE g.post_id = p.id) AS has_garment";
     private static final long MAX_PHOTO_BYTES = 5L * 1024 * 1024;
     private static final Set<String> PHOTO_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
@@ -206,6 +211,13 @@ public class StyleVoteController {
 
         long id = insert(req.item(), req.category(), title, colors, comment, user.nickname(), user.key(), outfit, gender, age);
         return findForAuthor(id, user.key());
+    }
+
+    @GetMapping("/{id}")
+    public StylePost one(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ensureSchema();
+        requireVisible(id);
+        return findForAuthor(id, auth.current(authorization).map(AuthService.User::key).orElse(""));
     }
 
     @PutMapping("/{id}")
@@ -441,6 +453,44 @@ public class StyleVoteController {
         return found.get(0);
     }
 
+    @PostMapping("/{id}/garment")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void uploadGarment(@PathVariable long id, @RequestParam("image") MultipartFile image,
+                              @RequestHeader(value = "Authorization", required = false) String authorization) throws java.io.IOException {
+        String me = auth.require(authorization).key();
+        ensureSchema();
+        requireOwner(id, me);
+        if (image.isEmpty()) throw bad("옷 사진이 비어 있어요.");
+        if (image.getSize() > MAX_PHOTO_BYTES) throw bad("옷 사진은 5MB 이하로 올려 주세요.");
+        String type = image.getContentType() == null ? "" : image.getContentType();
+        if (!PHOTO_TYPES.contains(type)) throw bad("JPG·PNG·WEBP 사진만 올릴 수 있어요.");
+        jdbc.update("REPLACE INTO post_garments (post_id, content_type, image) VALUES (?, ?, ?)", id, type, image.getBytes());
+    }
+
+    @DeleteMapping("/{id}/garment")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteGarment(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String me = auth.require(authorization).key();
+        ensureSchema();
+        requireOwner(id, me);
+        jdbc.update("DELETE FROM post_garments WHERE post_id = ?", id);
+    }
+
+    @GetMapping("/{id}/garment")
+    public ResponseEntity<byte[]> garment(@PathVariable long id) {
+        ensureSchema();
+        List<ResponseEntity<byte[]>> found = jdbc.query("""
+                SELECT g.content_type, g.image FROM post_garments g JOIN style_posts p ON p.id = g.post_id
+                WHERE g.post_id = ? AND p.hidden = 0""",
+                (rs, i) -> ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType(rs.getString("content_type")))
+                        .cacheControl(CacheControl.maxAge(java.time.Duration.ofMinutes(10)))
+                        .body(rs.getBytes("image")),
+                id);
+        if (found.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "옷 사진이 없어요.");
+        return found.get(0);
+    }
+
     /** 글 목록 공통 SELECT (투표 수, 내 투표·내 글·신고 여부, 작성자 등급, 사진 여부) */
     private String feedSelect(String extraColumns) {
         return """
@@ -624,6 +674,14 @@ public class StyleVoteController {
                       FOREIGN KEY (post_id) REFERENCES style_posts(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""");
             jdbc.execute("""
+                    CREATE TABLE IF NOT EXISTS post_garments (
+                      post_id BIGINT PRIMARY KEY,
+                      content_type VARCHAR(20) NOT NULL,
+                      image MEDIUMBLOB NOT NULL,
+                      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      FOREIGN KEY (post_id) REFERENCES style_posts(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB""");
+            jdbc.execute("""
                     CREATE TABLE IF NOT EXISTS post_comments (
                       id BIGINT AUTO_INCREMENT PRIMARY KEY,
                       post_id BIGINT NOT NULL,
@@ -800,7 +858,7 @@ public class StyleVoteController {
         return keys.getKey().longValue();
     }
 
-    /** 방금 쓰거나 고친 글을 작성자 시점(mine=true)으로 다시 읽는다. */
+    /** 글 하나를 viewer 시점으로 읽는다 (방금 쓰거나 고친 글이면 작성자 시점이라 mine=true). */
     private StylePost findForAuthor(long id, String author) {
         return withLinks(jdbc.queryForObject("""
                 SELECT p.*, (SELECT COUNT(*) FROM style_votes v WHERE v.post_id = p.id) AS votes,
@@ -895,7 +953,8 @@ public class StyleVoteController {
                 userIdOf(rs.getString("author_id")),
                 rs.getInt("author_tier"),
                 List.of(),
-                rs.getInt("comment_count"));
+                rs.getInt("comment_count"),
+                rs.getInt("has_garment") == 1);
     }
 
     /** "u:12" -> 12. 예시 글처럼 작성자가 없으면 null. */

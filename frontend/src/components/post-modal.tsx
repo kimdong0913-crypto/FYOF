@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Heart, Lightbulb, X } from "lucide-react";
+import { Camera, Heart, Lightbulb, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Comments } from "@/components/comments";
 import { LinkList, TaggedPhoto, type LinkTag } from "@/components/link-tags";
@@ -9,13 +9,14 @@ import { TierBadge } from "@/components/tier-badge";
 import { UserAvatar } from "@/components/user-avatar";
 import { api, photoUrl } from "@/lib/api";
 import { itemById } from "@/lib/catalog";
+import { canLiveTry } from "@/lib/live-tryon";
 import { likeBurst } from "@/lib/like-burst";
 import type { Outfit } from "@/lib/outfit";
 
 /** 게시물 창에 필요한 글 정보 (글 목록 API 가 주는 모양) */
 export type ModalPost = {
   id: number; item: string; category: "OUTFIT" | "TIP"; title: string; colors: string[]; comment: string; createdAt: string;
-  outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; hasPhoto: boolean; links: LinkTag[];
+  outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; hasPhoto: boolean; links: LinkTag[]; hasGarment?: boolean;
   nickname?: string; authorUserId?: number | null; authorTier?: number;
 };
 
@@ -49,6 +50,7 @@ export function PostModal({ post, onClose, onVote, error, onComments }: { post: 
           <small className="modal-hint">코디 구성 · 아이템을 누르면 스타일 가이드로 가요</small>
           <OutfitPieces outfit={post.outfit} highlight={post.item}/>
         </>}
+        {canLiveTry(post.outfit) && <Link to="/fitting" search={{ item: post.item, mode: "live", post: post.id }} className="live-try-link" onClick={onClose}><Camera size={15}/> 이 코디 입어보기{post.hasGarment ? <em>👕 정확도 높음</em> : null}</Link>}
         {!post.outfit && item && <Link to="/item/$id" params={{ id: post.item }} className="inline-link">{item.name} 스타일 가이드 보기</Link>}
         {post.comment && <p>{post.comment}</p>}
         <LinkList links={post.links}/>
