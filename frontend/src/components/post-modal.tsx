@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { Heart, Lightbulb, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Comments } from "@/components/comments";
 import { LinkList, TaggedPhoto, type LinkTag } from "@/components/link-tags";
 import { OutfitPieces } from "@/components/outfit-card";
 import { TierBadge } from "@/components/tier-badge";
@@ -53,6 +54,7 @@ export function PostModal({ post, onClose, onVote, error }: { post: ModalPost; o
         <Button variant="outline" className={post.voted ? "vote-button voted" : "vote-button"} aria-pressed={post.voted} onClick={e => { likeBurst(e.currentTarget, !post.voted); onVote(); }}><Heart size={15} fill={post.voted ? "currentColor" : "none"}/><strong key={post.votes} className="like-count">{post.votes}</strong></Button>
         {post.mine && <small className="vote-form-note">내 글에는 추천할 수 있지만 순위에는 들어가지 않아요.</small>}
         {error && <p className="ai-error">{error}</p>}
+        <Comments key={post.id} postId={post.id} onNavigate={onClose}/>
       </div>
     </div>
   </div>;

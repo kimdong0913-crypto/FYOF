@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight, ChevronDown, Flag, Heart, ImagePlus, Lightbulb, Pencil, Shirt, Trash2, X } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Flag, Heart, ImagePlus, Lightbulb, MessageCircle, Pencil, Shirt, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Comments } from "@/components/comments";
 import { LinkList, LinkTagEditor, TaggedPhoto, linksProblem, type LinkTag } from "@/components/link-tags";
 import { OutfitPieces } from "@/components/outfit-card";
 import { UserAvatar } from "@/components/user-avatar";
@@ -17,7 +18,7 @@ import { ages, colorById, genders, palette } from "@/lib/palette";
 import { useUser } from "@/lib/session";
 
 type Category = "OUTFIT" | "TIP";
-type StylePost = { id: number; item: string; category: Category; title: string; colors: string[]; comment: string; nickname: string; createdAt: string; edited: boolean; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; reported: boolean; authorBadge: boolean; hasPhoto: boolean; authorUserId: number | null; authorTier: number; links: LinkTag[] };
+type StylePost = { id: number; item: string; category: Category; title: string; colors: string[]; comment: string; nickname: string; createdAt: string; edited: boolean; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; reported: boolean; authorBadge: boolean; hasPhoto: boolean; authorUserId: number | null; authorTier: number; links: LinkTag[]; comments: number };
 type Draft = { title: string; comment: string; outfit: Outfit; photo: "keep" | "remove" | Blob; links: LinkTag[] };
 
 const filters = [{ id: "ALL", label: "전체" }, { id: "OUTFIT", label: "코디" }, { id: "TIP", label: "팁" }] as const;
@@ -105,6 +106,7 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
   const [editing, setEditing] = useState<{ id: number; draft: Draft } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [openComments, setOpenComments] = useState<number | null>(null);
 
   useEffect(() => { setOutfit(startOutfit()); }, [startOutfit]);
 
@@ -235,12 +237,14 @@ export function StyleVoteBoard({ item, fit, onChange }: { item: Item; fit?: stri
                 {post.comment && <p>{post.comment}</p>}
                 <span className="vote-track"><span style={{ width: `${share}%` }}/></span>
                 <div className="vote-owner-actions">
+                  <Button size="sm" variant="ghost" aria-expanded={openComments === post.id} onClick={() => setOpenComments(openComments === post.id ? null : post.id)}><MessageCircle size={13}/> 댓글 {post.comments}</Button>
                   {post.mine ? (confirmDelete === post.id
                     ? <><span className="vote-confirm">정말 삭제할까요?</span><Button size="sm" variant="ghost" className="danger" onClick={() => remove(post)}>삭제</Button><Button size="sm" variant="ghost" onClick={() => setConfirmDelete(null)}>취소</Button></>
                     : <><Button size="sm" variant="ghost" onClick={() => { setEditing({ id: post.id, draft: { title: post.title, comment: post.comment, outfit: post.outfit ?? emptyOutfit(), photo: "keep", links: post.links } }); setConfirmDelete(null); setNotice(null); }}><Pencil size={13}/> 수정</Button><Button size="sm" variant="ghost" onClick={() => { setConfirmDelete(post.id); setEditing(null); }}><Trash2 size={13}/> 삭제</Button></>)
                     : <Button size="sm" variant="ghost" disabled={post.reported} onClick={() => report(post)} aria-label={`${post.title} 신고`}><Flag size={13}/> {post.reported ? "신고됨" : "신고"}</Button>}
                 </div>
               </>}
+              {openComments === post.id && !isEditing && <Comments postId={post.id} onCount={n => setPosts(ps => ps.map(p => p.id === post.id ? { ...p, comments: n } : p))}/>}
               {notice?.id === post.id && <p className="ai-error" role="alert">{notice.text}</p>}
             </div>
             <Button variant="outline" className={post.voted ? "vote-button voted" : "vote-button"} aria-pressed={post.voted} aria-label={`${post.title}에 추천`} onClick={e => { likeBurst(e.currentTarget, !post.voted); void vote(post); }}><Heart size={15} fill={post.voted ? "currentColor" : "none"}/><strong key={post.votes} className="like-count">{post.votes}</strong></Button>

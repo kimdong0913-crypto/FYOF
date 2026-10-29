@@ -54,6 +54,7 @@ import org.springframework.web.server.ResponseStatusException;
  *   GET    /api/style-posts/{id}/photo    -> image/jpeg (누구나)
  *   PUT    /api/style-posts/{id}/links    (본인)   [{ label, url, x, y }] -> 구매처 링크 태그를 통째로 바꾼다 (최대 5개, x·y 는 사진 위 위치 %)
  *   GET    /api/style-posts/users/{userId} -> 프로필 + 그 사람이 올린 글 (인스타 피드처럼)
+ * 댓글은 CommentController (/api/style-posts/{id}/comments) 가 맡고, 글에는 댓글 수(comments)만 붙인다.
  * 작성자·투표자는 "u:사용자번호" 로 저장하고, 응답에는 mine/me 같은 true/false 로만 알려준다.
  */
 @RestController
@@ -87,10 +88,10 @@ public class StyleVoteController {
     public record StylePost(long id, String item, String category, String title, List<String> colors,
                             String comment, String nickname, String createdAt, boolean edited, Outfit outfit,
                             int votes, boolean voted, boolean mine, boolean reported, boolean authorBadge,
-                            boolean hasPhoto, Long authorUserId, int authorTier, List<LinkTag> links) {
+                            boolean hasPhoto, Long authorUserId, int authorTier, List<LinkTag> links, int comments) {
         StylePost withLinks(List<LinkTag> l) {
             return new StylePost(id, item, category, title, colors, comment, nickname, createdAt, edited, outfit, votes, voted, mine,
-                    reported, authorBadge, hasPhoto, authorUserId, authorTier, l);
+                    reported, authorBadge, hasPhoto, authorUserId, authorTier, l, comments);
         }
     }
 
@@ -139,6 +140,8 @@ public class StyleVoteController {
 
     /** 이 아이템이 어느 칸에든 들어간 글 */
     private static final String HAS_PHOTO = "EXISTS (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id) AS has_photo";
+    /** 글 목록에 같이 읽는 사진 여부 + 댓글 수 */
+    private static final String EXTRAS = HAS_PHOTO + ", (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = p.id) AS comment_count";
     private static final long MAX_PHOTO_BYTES = 5L * 1024 * 1024;
     private static final Set<String> PHOTO_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
@@ -179,7 +182,7 @@ public class StyleVoteController {
                 FROM style_posts p
                 LEFT JOIN style_votes v ON v.post_id = p.id
                 LEFT JOIN (%s) a ON a.author_id = p.author_id
-                """.formatted(BADGE_RULE, TIER_RULE, HAS_PHOTO, AUTHOR_STATS) + where + " GROUP BY p.id ORDER BY " + order + " LIMIT 100",
+                """.formatted(BADGE_RULE, TIER_RULE, EXTRAS, AUTHOR_STATS) + where + " GROUP BY p.id ORDER BY " + order + " LIMIT 100",
                 this::mapPost, args.toArray()));
     }
 
@@ -449,7 +452,7 @@ public class StyleVoteController {
                 FROM style_posts p
                 LEFT JOIN style_votes v ON v.post_id = p.id
                 LEFT JOIN (%s) a ON a.author_id = p.author_id
-                """.formatted(extraColumns, BADGE_RULE, TIER_RULE, HAS_PHOTO, AUTHOR_STATS);
+                """.formatted(extraColumns, BADGE_RULE, TIER_RULE, EXTRAS, AUTHOR_STATS);
     }
 
     @GetMapping("/trending")
@@ -529,7 +532,7 @@ public class StyleVoteController {
                        ? AS author_badge, ? AS author_tier, %s
                 FROM style_posts p LEFT JOIN style_votes v ON v.post_id = p.id
                 WHERE p.author_id = ? AND p.hidden = 0
-                GROUP BY p.id ORDER BY p.id DESC LIMIT 200""".formatted(HAS_PHOTO),
+                GROUP BY p.id ORDER BY p.id DESC LIMIT 200""".formatted(EXTRAS),
                 this::mapPost, me, me, me, found.get(0).badge() ? 1 : 0, found.get(0).tier(), key);
         return new ProfilePage(found.get(0), withLinks(posts));
     }
@@ -547,8 +550,8 @@ public class StyleVoteController {
         return Map.of("error", "데이터베이스에 연결할 수 없습니다.");
     }
 
-    /** 처음 요청이 들어올 때 테이블을 만들고, 예전 구조의 DB 면 새 구조로 옮긴 뒤 예시 코디를 넣는다. */
-    private void ensureSchema() {
+    /** 처음 요청이 들어올 때 테이블을 만들고, 예전 구조의 DB 면 새 구조로 옮긴 뒤 예시 코디를 넣는다. (CommentController 도 부른다) */
+    void ensureSchema() {
         if (schemaReady) return;
         synchronized (this) {
             if (schemaReady) return;
@@ -618,6 +621,16 @@ public class StyleVoteController {
                       x TINYINT NULL,
                       y TINYINT NULL,
                       INDEX idx_post (post_id),
+                      FOREIGN KEY (post_id) REFERENCES style_posts(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""");
+            jdbc.execute("""
+                    CREATE TABLE IF NOT EXISTS post_comments (
+                      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                      post_id BIGINT NOT NULL,
+                      author_id VARCHAR(64) NOT NULL,
+                      body VARCHAR(200) NOT NULL,
+                      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      INDEX idx_post (post_id, id),
                       FOREIGN KEY (post_id) REFERENCES style_posts(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""");
             Integer seeded = jdbc.queryForObject("SELECT COUNT(*) FROM style_posts WHERE category = 'OUTFIT' AND top_item <> ''", Integer.class);
@@ -795,7 +808,7 @@ public class StyleVoteController {
                        (p.author_id <> '' AND p.author_id = ?) AS mine, 0 AS reported,
                        COALESCE((SELECT %s FROM (%s) a WHERE a.author_id = p.author_id), 0) AS author_badge,
                        COALESCE((SELECT %s FROM (%s) a WHERE a.author_id = p.author_id), 0) AS author_tier, %s
-                FROM style_posts p WHERE p.id = ?""".formatted(BADGE_RULE, AUTHOR_STATS, TIER_RULE, AUTHOR_STATS, HAS_PHOTO),
+                FROM style_posts p WHERE p.id = ?""".formatted(BADGE_RULE, AUTHOR_STATS, TIER_RULE, AUTHOR_STATS, EXTRAS),
                 this::mapPost, author, author, id));
     }
 
@@ -881,7 +894,8 @@ public class StyleVoteController {
                 rs.getInt("has_photo") == 1,
                 userIdOf(rs.getString("author_id")),
                 rs.getInt("author_tier"),
-                List.of());
+                List.of(),
+                rs.getInt("comment_count"));
     }
 
     /** "u:12" -> 12. 예시 글처럼 작성자가 없으면 null. */
