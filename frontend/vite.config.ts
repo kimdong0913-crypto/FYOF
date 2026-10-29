@@ -12,4 +12,6 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // 실시간 AI 피팅 SDK 는 버튼을 누를 때 불러오는데(dynamic import), 개발 서버가 미리 묶어 두지 않으면 404 가 난다
+  vite: { optimizeDeps: { include: ["@decartai/sdk"] } },
 });

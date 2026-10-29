@@ -88,23 +88,26 @@ export function LiveTryOn({ prompt, garment, label }: { prompt: string; garment:
   };
 
   const busy = state === "connecting" || state === "live";
+  const ready = state === "idle" || state === "ended" || state === "error";
+  // 시작 버튼: 로그인 안 했으면 로그인으로, 했으면 카메라 켜기 (화면 가운데와 아래에 같이 둔다)
+  const startButton = (className?: string) => !user
+    ? <Button asChild className={className}><Link to="/login" search={{ redirect: location.href }}><Camera size={16}/> 로그인하고 카메라 켜기</Link></Button>
+    : <Button className={className} disabled={!ready || status?.left === 0} onClick={() => void start()}><Camera size={16}/> {state === "ended" || state === "error" ? "다시 카메라 켜기" : "카메라 켜기"}</Button>;
   return <div className="live-tryon">
     <div className="live-stage">
       <video ref={output} className={state === "live" ? "live-output visible" : "live-output"} autoPlay playsInline muted/>
       <video ref={preview} className={state === "connecting" ? "live-preview visible" : "live-preview"} autoPlay playsInline muted/>
       {state === "live" && <span className="live-badge"><i/> LIVE · {seconds}초</span>}
       {state === "connecting" && <span className="live-center"><Loader2 size={28} className="spin"/>AI에 연결하는 중…</span>}
-      {!busy && <span className="live-center"><Camera size={34} strokeWidth={1}/>
-        {state === "checking" ? "확인하는 중…"
+      {!busy && <div className="live-center"><Camera size={34} strokeWidth={1}/>
+        <span>{state === "checking" ? "확인하는 중…"
           : state === "off" ? "실시간 AI 피팅은 준비 중이에요."
-          : state === "ended" && message ? message : `카메라를 켜면 ${label}을(를) 실시간으로 입혀 드려요.`}
-      </span>}
+          : state === "ended" && message ? message : `카메라를 켜면 ${label}을(를) 실시간으로 입혀 드려요.`}</span>
+        {ready && startButton("live-start")}
+      </div>}
     </div>
     <div className="live-actions">
-      {state === "live" || state === "connecting"
-        ? <Button variant="outline" onClick={() => stop()}><Square size={15}/> 멈추기</Button>
-        : !user ? <Button asChild disabled={state === "off"}><Link to="/login" search={{ redirect: location.href }}>로그인하고 입어보기</Link></Button>
-        : <Button disabled={state === "off" || state === "checking" || status?.left === 0} onClick={() => void start()}><Camera size={16}/> {state === "ended" || state === "error" ? "다시 입어보기" : "카메라로 입어보기"}</Button>}
+      {busy ? <Button variant="outline" onClick={() => stop()}><Square size={15}/> 멈추기</Button> : startButton()}
       {status?.enabled && <small>한 번에 {status.maxSeconds}초 · 오늘 {status.left}번 남음 · 상의·아우터만 바뀌어요</small>}
     </div>
     {state === "error" && message && <p className="ai-error" role="alert">{message}</p>}
