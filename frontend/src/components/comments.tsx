@@ -17,7 +17,7 @@ function timeAgo(iso: string) {
 }
 
 /** 게시물 댓글. 불러오거나 쓰고 지울 때마다 onCount 로 개수를 알려 준다(글 목록의 "댓글 N" 갱신용). */
-export function Comments({ postId, onCount, onNavigate }: { postId: number; onCount?: (n: number) => void; onNavigate?: () => void }) {
+export function Comments({ postId, onCount, onNavigate }: { postId: number; onCount?: ((n: number) => void) | undefined; onNavigate?: () => void }) {
   const user = useUser();
   const location = useLocation();
   const [comments, setComments] = useState<Comment[]>([]);

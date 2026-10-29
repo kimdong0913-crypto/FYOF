@@ -23,7 +23,8 @@ export type ModalPost = {
 export const toggleVote = (postId: number) => api<{ votes: number; voted: boolean }>(`/api/style-posts/${postId}/vote`, { method: "POST" });
 
 /** 게시물을 크게 보는 창. 코디 구성의 아이템을 누르면 그 아이템의 스타일 가이드로 간다. */
-export function PostModal({ post, onClose, onVote, error }: { post: ModalPost; onClose: () => void; onVote: () => void; error?: string }) {
+/** onComments: 댓글을 불러오거나 쓰고 지울 때마다 개수를 알려 준다 (목록의 댓글 수 갱신용) */
+export function PostModal({ post, onClose, onVote, error, onComments }: { post: ModalPost; onClose: () => void; onVote: () => void; error?: string; onComments?: (n: number) => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -54,7 +55,7 @@ export function PostModal({ post, onClose, onVote, error }: { post: ModalPost; o
         <Button variant="outline" className={post.voted ? "vote-button voted" : "vote-button"} aria-pressed={post.voted} onClick={e => { likeBurst(e.currentTarget, !post.voted); onVote(); }}><Heart size={15} fill={post.voted ? "currentColor" : "none"}/><strong key={post.votes} className="like-count">{post.votes}</strong></Button>
         {post.mine && <small className="vote-form-note">내 글에는 추천할 수 있지만 순위에는 들어가지 않아요.</small>}
         {error && <p className="ai-error">{error}</p>}
-        <Comments key={post.id} postId={post.id} onNavigate={onClose}/>
+        <Comments key={post.id} postId={post.id} onNavigate={onClose} onCount={onComments}/>
       </div>
     </div>
   </div>;

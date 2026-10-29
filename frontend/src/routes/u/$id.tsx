@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Camera, Heart, Images, LayoutGrid, Lightbulb, Loader2, Shirt, Trash2 } from "lucide-react";
+import { ArrowUpRight, Camera, Heart, Images, LayoutGrid, Lightbulb, Loader2, MessageCircle, Shirt, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LinkTag } from "@/components/link-tags";
 import { PostModal, toggleVote } from "@/components/post-modal";
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/u/$id")({
   component: ProfilePage,
 });
 
-type Post = { id: number; item: string; category: "OUTFIT" | "TIP"; title: string; colors: string[]; comment: string; createdAt: string; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; hasPhoto: boolean; links: LinkTag[] };
+type Post = { id: number; item: string; category: "OUTFIT" | "TIP"; title: string; colors: string[]; comment: string; createdAt: string; outfit: Outfit | null; votes: number; voted: boolean; mine: boolean; hasPhoto: boolean; links: LinkTag[]; comments: number };
 type Profile = { userId: number; nickname: string; joinedAt: string; posts: number; votes: number; badge: boolean; tier: number; me: boolean };
 
 /** 다음 등급까지 남은 것 (백엔드 TIERS 와 같은 기준: 글 + 추천 둘 다) */
@@ -40,7 +40,7 @@ function Tile({ post, onOpen }: { post: Post; onOpen: () => void }) {
       : post.category === "OUTFIT" ? <span className="feed-colors">{post.colors.map((c, i) => <i key={i} style={{ background: c }}/>)}</span>
       : <span className="feed-tip"><Lightbulb size={18}/><span>{post.comment}</span></span>}
     <span className="feed-caption"><strong>{post.title}</strong><small>{item?.name}</small></span>
-    <span className="feed-hover"><Heart size={16} fill="currentColor"/> {post.votes}</span>
+    <span className="feed-hover"><span><Heart size={16} fill="currentColor"/> {post.votes}</span><span><MessageCircle size={16} fill="currentColor"/> {post.comments}</span></span>
     {post.hasPhoto && <span className="feed-kind"><Images size={13}/></span>}
   </button>;
 }
@@ -135,6 +135,7 @@ function ProfilePage() {
     {shown.length === 0 ? <p className="vote-empty">{tab === "photo" ? "아직 사진이 있는 코디가 없어요." : profile.me ? "아직 올린 글이 없어요. 아이템 가이드에서 첫 코디를 올려 보세요." : "아직 올린 글이 없어요."}</p>
       : <div className="feed-grid">{shown.map(p => <Tile key={p.id} post={p} onOpen={() => setOpen(p)}/>)}</div>}
 
-    {open && <PostModal post={open} onClose={() => setOpen(null)} onVote={() => void vote(open)} error={error}/>}
+    {open && <PostModal post={open} onClose={() => setOpen(null)} onVote={() => void vote(open)} error={error}
+      onComments={n => setData(d => d && { ...d, posts: d.posts.map(p => p.id === open.id ? { ...p, comments: n } : p) })}/>}
   </main><SiteFooter/></>;
 }

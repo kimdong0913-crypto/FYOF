@@ -364,8 +364,9 @@ button.header-icon { background: none; border: 0; cursor: pointer; color: inheri
 .feed-caption { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 2px; padding: 26px 12px 10px; background: linear-gradient(transparent, rgba(0,0,0,.6)); color: #fff; }
 .feed-caption strong { font-size: 13px; }
 .feed-caption small { font-size: 10px; opacity: .85; }
-.feed-hover { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(0,0,0,.35); color: #fff; font-weight: 800; opacity: 0; transition: opacity .2s; }
+.feed-hover { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 18px; background: rgba(0,0,0,.35); color: #fff; font-weight: 800; opacity: 0; transition: opacity .2s; }
 .feed-tile:hover .feed-hover, .feed-tile:focus-visible .feed-hover { opacity: 1; }
+.feed-hover > span { display: inline-flex; align-items: center; gap: 6px; }
 .feed-kind { position: absolute; top: 8px; right: 8px; color: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
 .feed-modal { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.6); display: grid; place-items: center; padding: 20px; }
 .feed-modal-card { position: relative; width: min(920px, 100%); max-height: calc(100vh - 40px); overflow: auto; display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); background: var(--background); }
