@@ -1,4 +1,4 @@
-# 깃에 올리지 않는 파일 목록 (비밀번호, 설치하면 다시 생기는 것, 큰 파일, 개인 자료)
+# 깃에 올리지 않는 파일 목록 (비밀번호, 설치하면 다시 생기는 것, 큰 파일, 개인 자료·문서)
 # 비밀번호·서버 주소 (각자 PC/서버에서 따로 만든다)
 .env
 .env.*
@@ -29,10 +29,7 @@ db.properties.*
 photos-inbox/
 
 # 개인 자료·작업 도구 (내 PC에만 둔다)
-docs/조별 발표 과제_2.pdf
-docs/발표/
-docs/원본사진/
-docs/vm-기록/
+docs/
 tools/
 frontend/roadmap.md
 frontend/AGENTS.md
