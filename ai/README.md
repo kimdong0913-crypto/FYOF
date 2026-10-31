@@ -14,6 +14,16 @@
   → 옷을 입힌 PNG 이미지를 돌려줌
 ```
 
+## 켜는 방법
+```
+cd ai/fashn-vton-1.5
+python -m venv .venv
+.venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+.venv/bin/pip install -e . onnxruntime fastapi "uvicorn[standard]" python-multipart
+.venv/bin/python scripts/download_weights.py --weights-dir ./weights   # 모델 2.2GB
+cd ../ai-service && ../fashn-vton-1.5/.venv/bin/python -m uvicorn server:app --port 8000
+```
+
 ## 참고
 - 모델 가중치 파일(2.2GB)은 깃에 안 올라가요. `fashn-vton-1.5/scripts/download_weights.py`로 받아요.
 - 실시간 카메라 피팅은 이 폴더가 아니라 외부 서비스(Decart API)를 써요 → `backend-demo/LiveTryOnController.java`, `frontend/src/components/live-tryon.tsx`
