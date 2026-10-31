@@ -104,62 +104,23 @@
 
 ---
 
-## 개발자용: 설치와 실행
+## 7. 실행 방법
 
-### 따로 만들어야 하는 설정 파일 (git에 안 올라감)
+**필요한 것**: Node.js, JDK 21, MySQL 8 (사진 피팅까지 쓰려면 Python)
 
-- `frontend/.env`
-  ```
-  VITE_API_URL=http://<백엔드 주소>:8081
-  ```
-- `backend-demo/db.properties` (`db.properties.example` 참고)
-  ```
-  spring.datasource.url=jdbc:mysql://<DB 주소>:3306/fyof?createDatabaseIfNotExist=true&characterEncoding=UTF-8&serverTimezone=UTC
-  DB_USER=root
-  DB_PASSWORD=...
-  app.cors.origins=http://<프론트 주소>:8080,http://localhost:*
-  decart.api-key=<실시간 피팅용 Decart API 키, 없으면 "준비 중"으로 표시>
-  ```
+**1. 설정 파일 2개 만들기** (비밀번호가 들어가서 저장소에는 없어요)
 
-### 다시 설치해야 하는 것
-
-| 무엇 | 명령 (해당 폴더에서) |
+| 파일 | 내용 |
 |---|---|
-| 프론트 패키지 (`node_modules`) | `npm install` |
-| AI 파이썬 환경 (`.venv`) | `python3 -m venv .venv` → `.venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu` → `.venv/bin/pip install -e .` → `.venv/bin/pip install onnxruntime fastapi "uvicorn[standard]" python-multipart` |
-| AI 모델 가중치 (2.2GB) | `.venv/bin/python scripts/download_weights.py --weights-dir ./weights` |
+| `frontend/.env` | `VITE_API_URL=http://localhost:8081` |
+| `backend-demo/db.properties` | DB 주소·비밀번호. `db.properties.example`을 복사해서 채우기 (실시간 피팅을 쓰려면 `decart.api-key`도) |
 
-### 이 PC에서 실행
+**2. 실행**
 
-- **켜기**: `start-local.bat` 더블클릭 → DB(MySQL) → 백엔드(8081) → 프론트(8080) 창이 따로 뜨고 브라우저가 열린다 (처음엔 1~2분)
-- **끄기**: `stop-local.bat` 더블클릭
-- 경로(MySQL, 데이터 폴더, JDK 21)는 `start-local.bat` 맨 위에서 바꾼다
+| 순서 | 할 일 |
+|---|---|
+| ① | `frontend` 폴더에서 `npm install` (처음 한 번) |
+| ② | `start-local.bat` 더블클릭 → DB, 서버, 화면이 켜지고 브라우저가 열려요 |
+| ③ | 끌 때는 `stop-local.bat` 더블클릭 |
 
-### 서버(VM)에서 실행 (1차 때 쓰던 명령)
-
-```bash
-# AI 서버 (켜지는 데 1~2분)
-cd ai/ai-service && nohup ../fashn-vton-1.5/.venv/bin/python -m uvicorn server:app --port 8000 > ~/ai.log 2>&1 &
-
-# 백엔드
-cd backend-demo && chmod +x gradlew && nohup ./gradlew bootRun > ~/backend.log 2>&1 &
-
-# 프론트 (외부 접속용)
-cd frontend && nohup npm run dev -- --host 0.0.0.0 --port 8080 --strictPort > ~/frontend.log 2>&1 &
-```
-
-확인:
-```bash
-curl localhost:8081/api/hello   # 백엔드
-curl localhost:8000/health      # AI → {"ready":true}
-```
-
-### 참고 메모
-
-- 피팅 1회 약 7분 반 (CPU, 16코어). `server.py`의 `num_timesteps`를 20 → 10으로 줄여서 썼다.
-- AI 서버는 메모리를 많이 써서 VM에 swap 8GB를 붙였다.
-- VM 외부 IP가 바뀌면 `frontend/.env`의 `VITE_API_URL`과 `db.properties`의 `app.cors.origins`를 같이 바꿔야 한다.
-- 방화벽: 8080(프론트), 8081(백엔드)만 열었다. 8000(AI)은 외부 차단.
-- 실시간 피팅(카메라)은 브라우저 정책상 https 주소나 localhost에서만 동작한다.
-- 핏은 아이템 안의 옵션(`frontend/src/lib/fits.ts`)이고, 색은 16색 팔레트 하나로 통일(`palette.ts` ↔ `StylePalette.java`)했다.
-- 테이블은 백엔드가 처음 요청을 받을 때 자동으로 만들고, 1차 구조의 DB면 새 구조로 옮긴다(`StyleVoteController.migrate`).
+> 사진 AI 피팅은 `ai/` 서버를 따로 켜야 해요 (`ai/README.md` 참고). 꺼져 있으면 사진 피팅 버튼만 "사용할 수 없음"으로 나오고 나머지는 그대로 동작해요.
