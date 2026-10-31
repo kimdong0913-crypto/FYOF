@@ -11,6 +11,7 @@ import { removeAvatar, uploadAvatar, useAvatarUrl } from "@/lib/avatars";
 import { squareImage } from "@/lib/image";
 import { api, errorText, photoUrl } from "@/lib/api";
 import { BadgeCase } from "@/components/badge-case";
+import { BodyFit } from "@/components/body-fit";
 import { achievements } from "@/lib/achievements";
 import { itemById } from "@/lib/catalog";
 import type { Outfit } from "@/lib/outfit";
@@ -127,6 +128,7 @@ function ProfilePage() {
         {profile.me && <div className="profile-actions"><Button asChild variant="outline" size="sm"><Link to="/closet"><Shirt size={14}/> 내 옷장</Link></Button><Button asChild variant="outline" size="sm"><Link to="/results" search={{ q: "전체" }}>코디 올리러 가기 <ArrowUpRight size={14}/></Link></Button></div>}
       </div>
     </header>
+    {profile.me && <BodyFit/>}
     <AchievementShelf posts={posts}/>
     <div className="profile-tabs" role="tablist">
       <Button variant="ghost" role="tab" aria-selected={tab === "all"} className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}><LayoutGrid size={15}/> 전체 {posts.length}</Button>
