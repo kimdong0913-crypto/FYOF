@@ -1,1 +1,2 @@
+# .bat 실행 파일은 윈도우 줄바꿈(CRLF)으로 저장해야 더블클릭으로 실행된다
 *.bat text eol=crlf
