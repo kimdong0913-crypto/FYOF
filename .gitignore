@@ -34,3 +34,7 @@ tools/
 frontend/roadmap.md
 frontend/AGENTS.md
 frontend/src/routes/README.md
+
+# 가져온 AI 모델의 예제·테스트 코드 (실행에 필요 없음)
+ai/fashn-vton-1.5/examples/
+ai/fashn-vton-1.5/tests/
