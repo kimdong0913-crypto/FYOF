@@ -43,17 +43,7 @@
 
 ---
 
-## 3. 화면
-
-| 홈 | 아이템 스타일 가이드 |
-|---|---|
-| ![홈](docs/screenshots/shot_home.png) | ![스타일 가이드](docs/screenshots/shot_item.png) |
-| **사용자 프로필 피드** | **실시간 AI 피팅** |
-| ![프로필](docs/screenshots/shot_profile.png) | ![실시간 피팅](docs/screenshots/shot_fitting.png) |
-
----
-
-## 4. 기술 스택과 구조
+## 3. 기술 스택과 구조
 
 | 부분 | 기술 |
 |---|---|
@@ -75,14 +65,13 @@
 | `backend-demo/` | API 서버 |
 | `ai/ai-service/` | 사진 피팅 추론 서버 (`server.py`) |
 | `ai/fashn-vton-1.5/` | 피팅 모델 코드 |
-| `docs/` | 기술구성 PDF, 코드 공부 정리, 화면 캡처 |
 
 > 각 폴더의 README.md에 파일별 역할을 적어 뒀어요.
 > 폴더 이름(`backend-demo`, `fashn-vton-1.5`)은 코드 안에서 경로로 쓰고 있어서 원래대로 뒀다.
 
 ---
 
-## 5. 기획 대비 바뀐 점
+## 4. 기획 대비 바뀐 점
 
 | 기획 | 결과 | 이유 |
 |---|---|---|
@@ -95,7 +84,7 @@
 
 ---
 
-## 6. 문제와 해결
+## 5. 문제와 해결
 
 | 문제 | 해결 |
 |---|---|
@@ -106,7 +95,7 @@
 
 ---
 
-## 7. 앞으로 할 것
+## 6. 앞으로 할 것
 
 - GCP에 다시 배포하고 https 적용 (휴대폰에서도 카메라 피팅 가능하게)
 - 체형 핏 추천을 커뮤니티 코디 데이터(비슷한 체형의 사람들이 고른 핏)와 연결
@@ -174,4 +163,3 @@ curl localhost:8000/health      # AI → {"ready":true}
 - 실시간 피팅(카메라)은 브라우저 정책상 https 주소나 localhost에서만 동작한다.
 - 핏은 아이템 안의 옵션(`frontend/src/lib/fits.ts`)이고, 색은 16색 팔레트 하나로 통일(`palette.ts` ↔ `StylePalette.java`)했다.
 - 테이블은 백엔드가 처음 요청을 받을 때 자동으로 만들고, 1차 구조의 DB면 새 구조로 옮긴다(`StyleVoteController.migrate`).
-- 1차 GCP 프로젝트는 2026-10-14에 삭제했다. 11/13쯤까지는 `gcloud projects undelete`로 복구할 수 있다.
