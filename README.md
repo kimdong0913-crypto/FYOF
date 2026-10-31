@@ -75,7 +75,7 @@
 | `backend-demo/` | API 서버 |
 | `ai/ai-service/` | 사진 피팅 추론 서버 (`server.py`) |
 | `ai/fashn-vton-1.5/` | 피팅 모델 코드 |
-| `docs/` | 기술구성 PDF, 공부 정리, 발표 대본, VM 명령어 기록, 화면 캡처 |
+| `docs/` | 기술구성 PDF, 코드 공부 정리, 화면 캡처 |
 
 > 폴더 이름(`backend-demo`, `fashn-vton-1.5`)은 코드 안에서 경로로 쓰고 있어서 원래대로 뒀다.
 

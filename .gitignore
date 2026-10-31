@@ -27,3 +27,13 @@ db.properties.*
 
 # 제미나이 앱에서 받은 원본 사진 (변환 후 frontend/src/assets/items 로 들어감)
 photos-inbox/
+
+# 개인 자료·작업 도구 (내 PC에만 둔다)
+docs/조별 발표 과제_2.pdf
+docs/발표/
+docs/원본사진/
+docs/vm-기록/
+tools/
+frontend/roadmap.md
+frontend/AGENTS.md
+frontend/src/routes/README.md
