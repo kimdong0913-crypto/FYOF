@@ -886,3 +886,9 @@ button.feed-likes.voted small { color: rgba(255,255,255,.7); }
 .live-try-link em { font-style: normal; font-size: 10px; opacity: .85; margin-left: 2px; }
 @media (max-width: 640px) { .live-stage { aspect-ratio: .85; } .fitting-tabs a { padding: 10px 12px; font-size: 12px; } }
 .live-center .live-start { background: var(--primary-foreground); color: var(--foreground); border-radius: 0; height: 46px; padding: 0 22px; font-weight: 800; }
+
+/* 게시물 창: 내 글 삭제 */
+.modal-owner-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.modal-owner-actions button { height: 28px; padding: 0 8px; border-radius: 0; font-size: 11px; font-weight: 700; color: var(--muted-foreground); box-shadow: none; gap: 4px; }
+.modal-owner-actions button:hover { color: var(--foreground); }
+.modal-owner-actions button.danger { color: var(--destructive); }

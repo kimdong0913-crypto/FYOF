@@ -1,13 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { Camera, Heart, Lightbulb, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Camera, Heart, Lightbulb, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Comments } from "@/components/comments";
 import { LinkList, TaggedPhoto, type LinkTag } from "@/components/link-tags";
 import { OutfitPieces } from "@/components/outfit-card";
 import { TierBadge } from "@/components/tier-badge";
 import { UserAvatar } from "@/components/user-avatar";
-import { api, photoUrl } from "@/lib/api";
+import { api, errorText, photoUrl } from "@/lib/api";
 import { itemById } from "@/lib/catalog";
 import { canLiveTry } from "@/lib/live-tryon";
 import { likeBurst } from "@/lib/like-burst";
@@ -24,8 +24,19 @@ export type ModalPost = {
 export const toggleVote = (postId: number) => api<{ votes: number; voted: boolean }>(`/api/style-posts/${postId}/vote`, { method: "POST" });
 
 /** 게시물을 크게 보는 창. 코디 구성의 아이템을 누르면 그 아이템의 스타일 가이드로 간다. */
-/** onComments: 댓글을 불러오거나 쓰고 지울 때마다 개수를 알려 준다 (목록의 댓글 수 갱신용) */
-export function PostModal({ post, onClose, onVote, error, onComments }: { post: ModalPost; onClose: () => void; onVote: () => void; error?: string; onComments?: (n: number) => void }) {
+/** onComments: 댓글을 불러오거나 쓰고 지울 때마다 개수를 알려 준다 (목록의 댓글 수 갱신용)
+ *  onDeleted: 내 글을 지운 뒤 부르면 목록에서 빼도록 알린다. 넘기지 않으면 삭제 버튼이 보이지 않는다. */
+export function PostModal({ post, onClose, onVote, error, onComments, onDeleted }: { post: ModalPost; onClose: () => void; onVote: () => void; error?: string; onComments?: ((n: number) => void) | undefined; onDeleted?: (() => void) | undefined }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const remove = async () => {
+    setDeleting(true); setDeleteError("");
+    try {
+      await api<void>(`/api/style-posts/${post.id}`, { method: "DELETE" });
+      onDeleted?.();
+    } catch (e) { setDeleteError(errorText(e, "삭제하지 못했어요.")); setDeleting(false); }
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -56,6 +67,12 @@ export function PostModal({ post, onClose, onVote, error, onComments }: { post: 
         <LinkList links={post.links}/>
         <Button variant="outline" className={post.voted ? "vote-button voted" : "vote-button"} aria-pressed={post.voted} onClick={e => { likeBurst(e.currentTarget, !post.voted); onVote(); }}><Heart size={15} fill={post.voted ? "currentColor" : "none"}/><strong key={post.votes} className="like-count">{post.votes}</strong></Button>
         {post.mine && <small className="vote-form-note">내 글에는 추천할 수 있지만 순위에는 들어가지 않아요.</small>}
+        {post.mine && onDeleted && <div className="modal-owner-actions">{confirmDelete
+          ? <><span className="vote-confirm">이 게시물을 삭제할까요? 댓글과 추천도 같이 지워져요.</span>
+              <Button size="sm" variant="ghost" className="danger" disabled={deleting} onClick={() => void remove()}>{deleting ? "삭제 중" : "삭제"}</Button>
+              <Button size="sm" variant="ghost" disabled={deleting} onClick={() => setConfirmDelete(false)}>취소</Button></>
+          : <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}><Trash2 size={13}/> 게시물 삭제</Button>}</div>}
+        {deleteError && <p className="ai-error" role="alert">{deleteError}</p>}
         {error && <p className="ai-error">{error}</p>}
         <Comments key={post.id} postId={post.id} onNavigate={onClose} onCount={onComments}/>
       </div>

@@ -138,6 +138,12 @@ function ProfilePage() {
       : <div className="feed-grid">{shown.map(p => <Tile key={p.id} post={p} onOpen={() => setOpen(p)}/>)}</div>}
 
     {open && <PostModal post={open} onClose={() => setOpen(null)} onVote={() => void vote(open)} error={error}
-      onComments={n => setData(d => d && { ...d, posts: d.posts.map(p => p.id === open.id ? { ...p, comments: n } : p) })}/>}
+      onComments={n => setData(d => d && { ...d, posts: d.posts.map(p => p.id === open.id ? { ...p, comments: n } : p) })}
+      onDeleted={() => {
+        // 목록에서 바로 빼고, 게시물 수·받은 추천·등급은 서버에서 다시 받아 온다
+        setData(d => d && { ...d, posts: d.posts.filter(p => p.id !== open.id) });
+        setOpen(null);
+        api<{ profile: Profile; posts: Post[] }>(`/api/style-posts/users/${id}`).then(setData).catch(() => {});
+      }}/>}
   </main><SiteFooter/></>;
 }
