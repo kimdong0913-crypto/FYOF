@@ -892,3 +892,16 @@ button.feed-likes.voted small { color: rgba(255,255,255,.7); }
 .modal-owner-actions button { height: 28px; padding: 0 8px; border-radius: 0; font-size: 11px; font-weight: 700; color: var(--muted-foreground); box-shadow: none; gap: 4px; }
 .modal-owner-actions button:hover { color: var(--foreground); }
 .modal-owner-actions button.danger { color: var(--destructive); }
+
+/* 실시간 피팅: 지금 옷의 게시물로 이동 */
+.live-post-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; padding: 6px 10px; border: 1px solid var(--foreground); background: var(--background); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.live-post-link:hover { background: var(--foreground); color: var(--background); }
+.live-related { margin-top: 16px; display: grid; gap: 8px; }
+.live-related-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.live-related-card { position: relative; aspect-ratio: 4 / 5; padding: 0; border: 0; overflow: hidden; cursor: pointer; background: var(--surface-soft); }
+.live-related-card > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.live-related-card .feed-colors { position: absolute; inset: 0; }
+.live-related-cap { position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 1px; padding: 18px 7px 6px; text-align: left; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+.live-related-cap strong { font-size: 11px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-related-cap small { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; opacity: .9; }
+.live-related .inline-link { font-size: 12px; font-weight: 800; }

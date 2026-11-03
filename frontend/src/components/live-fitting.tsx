@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, ExternalLink, Heart, X } from "lucide-react";
 import { LiveTryOn } from "@/components/live-tryon";
-import { api, garmentUrl, photoUrl } from "@/lib/api";
+import { PostModal, toggleVote, type ModalPost } from "@/components/post-modal";
+import { api, errorText, garmentUrl, photoUrl } from "@/lib/api";
 import { colorsFirst, itemById, itemsForSlot } from "@/lib/catalog";
 import { fitById } from "@/lib/fits";
 import { canLiveTry, livePiece, livePrompt } from "@/lib/live-tryon";
 import { emptyOutfit, type Outfit } from "@/lib/outfit";
 import { colorById, palette } from "@/lib/palette";
 
-type Post = { id: number; title: string; nickname: string; authorUserId: number | null; outfit: Outfit | null; hasPhoto: boolean; hasGarment: boolean };
+/** 글 API 가 주는 모양 (게시물 창에 그대로 넘긴다) */
+type Post = ModalPost & { nickname: string; authorUserId: number | null; hasGarment: boolean };
 
 /** 실시간 피팅이 입힐 수 있는 아이템 (아우터 + 상의) */
 const wearable = [...itemsForSlot("outer"), ...itemsForSlot("top")];
@@ -33,6 +35,9 @@ export function LiveFitting({ itemId, fit, postId }: { itemId: string; fit?: str
   });
   const [post, setPost] = useState<Post | null>(null);
   const [postError, setPostError] = useState("");
+  const [open, setOpen] = useState<Post | null>(null);         // 게시물 창에 띄운 글
+  const [voteError, setVoteError] = useState("");
+  const [related, setRelated] = useState<Post[]>([]);          // 지금 옷이 들어간 인기 코디
 
   useEffect(() => {
     setPost(null); setPostError("");
@@ -54,6 +59,27 @@ export function LiveFitting({ itemId, fit, postId }: { itemId: string; fit?: str
   const source = post ? (post.hasGarment ? "garment" : post.hasPhoto ? "photo" : "item") : "item";
   const sourceUrl = post && source === "garment" ? garmentUrl(post.id) : post && source === "photo" ? photoUrl(post.id) : main.image;
   const prompt = livePrompt(outfit);
+
+  // 직접 고른 옷이면, 그 아이템이 들어간 인기 코디 4개를 보여 준다
+  useEffect(() => {
+    if (post) { setRelated([]); return; }
+    let alive = true;
+    api<Post[]>(`/api/style-posts?item=${main.id}&category=OUTFIT&sort=votes`)
+      .then(list => { if (alive) setRelated(list.slice(0, 4)); })
+      .catch(() => { if (alive) setRelated([]); });
+    return () => { alive = false; };
+  }, [post, main.id]);
+
+  const vote = async (target: Post) => {
+    setVoteError("");
+    try {
+      const res = await toggleVote(target.id);
+      const merge = (p: Post) => (p.id === target.id ? { ...p, ...res } : p);
+      setOpen(o => o && merge(o));
+      setPost(p => p && merge(p));
+      setRelated(list => list.map(merge));
+    } catch (e) { setVoteError(errorText(e, "로그인하면 추천할 수 있어요.")); }
+  };
   const clearPost = () => navigate({ to: "/fitting", search: { mode: "live", item: main.id } });
 
   return <div className="fitting-layout">
@@ -69,6 +95,7 @@ export function LiveFitting({ itemId, fit, postId }: { itemId: string; fit?: str
           <h2>{post.title}</h2>
           <strong>{colorById(livePiece(outfit).color)?.ko} {main.name}</strong>
         </div></div>
+        <button type="button" className="live-post-link" onClick={() => setOpen(post)}><ExternalLink size={13}/> 게시물 보기</button>
         <p className="live-source">{source === "garment" ? "👕 작성자가 올린 옷 사진으로 입혀요. 가장 정확해요."
           : source === "photo" ? "📷 게시물 사진을 참고해서 입혀요. 옷 사진이 있는 게시물보다 덜 정확할 수 있어요."
           : "🧩 사진이 없는 게시물이라 아이템 기본 사진에 코디 색을 입혀요."}</p>
@@ -88,6 +115,14 @@ export function LiveFitting({ itemId, fit, postId }: { itemId: string; fit?: str
           <span className="swatch-name">{colorById(piece.color)?.ko}</span>
         </div>
         <p className="live-source">커뮤니티 게시물의 <strong>"📷 이 코디 입어보기"</strong>를 누르면 그 사람의 옷을 바로 입어 볼 수 있어요.</p>
+        {related.length > 0 && <div className="live-related">
+          <span className="fit-control-heading">{item.name}(으)로 올라온 코디</span>
+          <div className="live-related-grid">{related.map(p => <button type="button" key={p.id} className="live-related-card" onClick={() => setOpen(p)} aria-label={`${p.title} 게시물 보기`}>
+            {p.hasPhoto ? <img src={photoUrl(p.id)} alt="" loading="lazy"/> : <span className="feed-colors">{p.colors.map((c, i) => <i key={i} style={{ background: c }}/>)}</span>}
+            <span className="live-related-cap"><strong>{p.title}</strong><small>{p.nickname} · <Heart size={10} fill="currentColor"/> {p.votes}</small></span>
+          </button>)}</div>
+          <Link to="/item/$id" params={{ id: item.id }} className="inline-link">{item.name} 코디 전체 보기</Link>
+        </div>}
       </div>}
       <div className="fit-control-section">
         <span className="fit-control-heading">02 / 이렇게 써 보세요</span>
@@ -98,5 +133,6 @@ export function LiveFitting({ itemId, fit, postId }: { itemId: string; fit?: str
         </ul>
       </div>
     </aside>
+    {open && <PostModal post={open} onClose={() => { setOpen(null); setVoteError(""); }} onVote={() => void vote(open)} error={voteError}/>}
   </div>;
 }
