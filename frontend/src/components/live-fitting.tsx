@@ -58,7 +58,7 @@ export function LiveFitting({ itemId, fit, postId }: { itemId: string; fit?: str
 
   return <div className="fitting-layout">
     <div>
-      <LiveTryOn prompt={prompt} garment={() => blobOf(sourceUrl)} label={post ? `"${post.title}" 코디` : item.name}/>
+      <LiveTryOn prompt={prompt} garment={() => blobOf(sourceUrl)} label={post ? `"${post.title}" 코디` : item.name} productId={main.id}/>
       <div className="camera-under"><span>01 — REAL-TIME AI FITTING (BETA)</span><span>카메라 영상은 AI 서버(Decart)로 보내 처리하고, FYOF에는 저장하지 않아요.</span></div>
     </div>
     <aside className="fitting-controls">

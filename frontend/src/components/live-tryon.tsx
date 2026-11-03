@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
-import { Camera, Loader2, Square } from "lucide-react";
+import { Camera, Check, Loader2, Square } from "lucide-react";
 import type { RealTimeClient } from "@decartai/sdk";
 import { Button } from "@/components/ui/button";
 import { api, errorText } from "@/lib/api";
@@ -22,7 +22,8 @@ const endReason = (reason: string) =>
  * 카메라 실시간 AI 피팅. 시작하면 백엔드에서 짧은 토큰을 받아 Decart 와 WebRTC 로 연결하고,
  * 내 카메라 영상에 garment 사진의 옷을 입혀 돌려받는다. 요금이 초 단위라 maxSeconds 가 지나면 끊는다.
  */
-export function LiveTryOn({ prompt, garment, label }: { prompt: string; garment: () => Promise<Blob>; label: string }) {
+/** productId: 옷장에 저장할 때 붙일 아이템 id (찍은 사진은 옷장 "피팅 결과"에 AI 결과로 저장) */
+export function LiveTryOn({ prompt, garment, label, productId }: { prompt: string; garment: () => Promise<Blob>; label: string; productId: string }) {
   const user = useUser();
   const location = useLocation();
   const [status, setStatus] = useState<Status | null>(null);
@@ -34,6 +35,29 @@ export function LiveTryOn({ prompt, garment, label }: { prompt: string; garment:
   const client = useRef<RealTimeClient | null>(null);
   const camera = useRef<MediaStream | null>(null);
   const timer = useRef<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // 지금 AI가 입혀 준 화면 한 장을 찍어서 옷장에 저장한다 (영상은 계속 흘러가고, 크레딧은 더 안 든다)
+  const capture = async () => {
+    const v = output.current;
+    if (!v || !v.videoWidth) return;
+    setSaving(true); setSaved(null);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+      canvas.getContext("2d")!.drawImage(v, 0, 0);
+      const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, "image/jpeg", 0.92));
+      if (!blob) throw new Error("화면을 찍지 못했어요.");
+      const form = new FormData();
+      form.append("image", blob, "live-fit.jpg");
+      form.append("productId", productId);
+      form.append("ai", "true");
+      await api("/api/closet/fits", { method: "POST", body: form });
+      setSaved({ ok: true, text: "옷장에 저장했어요." });
+    } catch (e) { setSaved({ ok: false, text: errorText(e, "옷장에 저장하지 못했어요.") }); }
+    finally { setSaving(false); }
+  };
 
   useEffect(() => {
     api<Status>("/api/live-tryon")
@@ -57,7 +81,7 @@ export function LiveTryOn({ prompt, garment, label }: { prompt: string; garment:
   useEffect(() => { if (client.current) stop(); }, [prompt]);
 
   const start = async () => {
-    setState("connecting"); setMessage("");
+    setState("connecting"); setMessage(""); setSaved(null);
     try {
       const { createDecartClient, models } = await import("@decartai/sdk");
       const model = models.realtime(MODEL);
@@ -108,8 +132,10 @@ export function LiveTryOn({ prompt, garment, label }: { prompt: string; garment:
     </div>
     <div className="live-actions">
       {busy ? <Button variant="outline" onClick={() => stop()}><Square size={15}/> 멈추기</Button> : startButton()}
+      {state === "live" && <Button onClick={() => void capture()} disabled={saving}>{saving ? <Loader2 size={15} className="spin"/> : <Camera size={15}/>} {saving ? "저장 중" : "찍어서 옷장에 저장"}</Button>}
       {status?.enabled && <small>한 번에 {status.maxSeconds}초 · 오늘 {status.left}번 남음 · 상의·아우터만 바뀌어요</small>}
     </div>
     {state === "error" && message && <p className="ai-error" role="alert">{message}</p>}
+    {saved && <p className={saved.ok ? "detail-note" : "ai-error"} role="status">{saved.ok && <Check size={14}/>} {saved.text} {saved.ok && <Link to="/closet" className="inline-link">옷장 보기</Link>}</p>}
   </div>;
 }
